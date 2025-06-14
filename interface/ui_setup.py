@@ -99,6 +99,7 @@ def criar_menu_edicao(frame_botoes):
     tk.Button(frame_edicao, text="📤 Exportar", command=exportar_dados, bg='#FF9800', fg='white', font=('Arial', 8)).pack(side="left", padx=2)
 
 def abrir_janela():
+    print("Ola")  # Console log solicitado
     global tabela, text_resultado, linhas_agrupadas, linhas_selecionadas, df_global, label_selecao
     global entrada_hora_inicio, entrada_hora_fim, entrada_intervalo, entrada_data, entrada_maquina
     global frame_headers, frame_tabela_container
@@ -213,4 +214,4 @@ def abrir_janela():
     janela.mainloop()
 
 if __name__ == "__main__":
-    abrir_janela()# oiii
+    abrir_janela()
