@@ -213,4 +213,4 @@ def abrir_janela():
     janela.mainloop()
 
 if __name__ == "__main__":
-    abrir_janela()
+    abrir_janela()# oiii
