@@ -3,16 +3,22 @@ from tkinter import messagebox
 
 def agrupar_selecionadas():
     # Importação dinâmica das variáveis globais
-    from interface.ui_setup import df_global, linhas_agrupadas, linhas_selecionadas
-    
+    from interface.ui_setup import df_global, linhas_agrupadas, linhas_selecionadas, tabela
+    import tkinter.messagebox as messagebox
+
+    # Garante que a seleção está atualizada
+    selecionadas = tabela.selection() if tabela is not None else []
+    linhas_selecionadas.clear()
+    linhas_selecionadas.extend(tabela.index(i) for i in selecionadas)
+
     if not linhas_selecionadas:
         messagebox.showwarning("Atenção", "Nenhuma linha selecionada para agrupar.")
         return
-    
+
     novo_grupo = f"Grupo_{len(linhas_agrupadas) + 1}"
     linhas_agrupadas[novo_grupo] = linhas_selecionadas.copy()
     linhas_selecionadas.clear()
-    
+
     messagebox.showinfo("Sucesso", f"Linhas agrupadas em {novo_grupo}.")
 
 def desagrupar_selecionadas():

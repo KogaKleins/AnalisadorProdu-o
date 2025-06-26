@@ -67,6 +67,13 @@ def carregar_dados(data, maquina):
             
             df = df_novo
         
+        # Adicionar coluna 'Velocidade' se não existir
+        if 'Velocidade' not in df.columns:
+            if maquina.strip().lower() == 'komori':
+                df['Velocidade'] = 6000
+            else:
+                df['Velocidade'] = ''
+        
         # Calcular tempos de setup automaticamente - CORREÇÃO AQUI
         os_anteriores_por_processo = {}
         
@@ -77,6 +84,12 @@ def carregar_dados(data, maquina):
                 if "processo" in str(col).lower():
                     processo = str(row.get(col, ""))
                     break
+            # Tentar extrair tempo de setup do texto do processo
+            import re
+            tempo_setup_texto = re.search(r'(\d{1,3})\s*min', processo)
+            tempo_setup_extraido = None
+            if tempo_setup_texto:
+                tempo_setup_extraido = int(tempo_setup_texto.group(1))
             
             # Buscar OS
             os_value = ""
@@ -98,13 +111,14 @@ def carregar_dados(data, maquina):
                 # Verificar se é evento de acerto/setup
                 eventos_setup = ["acerto", "setup", "ajuste", "troca", "preparação"]
                 is_evento_setup = any(termo in evento for termo in eventos_setup)
-                
                 if is_evento_setup:
                     tipo_processo = processo.lower()
                     os_anterior = os_anteriores_por_processo.get(tipo_processo)
-                    
-                    tempo_setup = calcular_tempo_setup(processo, os_anterior)
-                    df.at[idx, 'Tempo Setup'] = f"{tempo_setup//60}:{tempo_setup%60:02d}"
+                    if tempo_setup_extraido:
+                        tempo_setup = tempo_setup_extraido
+                    else:
+                        tempo_setup = calcular_tempo_setup(processo, os_anterior)
+                    df.at[idx, 'Tempo Setup'] = f"{tempo_setup:02d}:00"
                 else:
                     # Para eventos que não são setup (como "ócioso"), deixar vazio
                     df.at[idx, 'Tempo Setup'] = ""
@@ -122,7 +136,8 @@ def carregar_dados(data, maquina):
         ui_setup.linhas_agrupadas = {}
 
         # Importação dinâmica e configuração da tabela
-        from interface.table_manager import configurar_tabela, carregar_dados_na_tabela
+        from interface.table_manager import configurar_tabela
+        from interface.ui_setup import carregar_dados_na_tabela
         configurar_tabela()
         carregar_dados_na_tabela()
 

@@ -1,9 +1,10 @@
 # Arquivo: data/metrics/relatorio.py
 from datetime import datetime
 import re
+from config.setup_config import tempos_setup
 
 def gerar_relatorio(grupos_para_analise, ops_analise, hora_inicio, hora_fim, intervalo):
-    """Gera relatório com cálculos mais precisos e melhorias solicitadas"""
+    """Gera relatório com cálculos corrigidos e estrutura reorganizada"""
     
     # Calcula tempo disponível
     tempo_disponivel = calcular_tempo_disponivel(hora_inicio, hora_fim, intervalo)
@@ -17,28 +18,35 @@ def gerar_relatorio(grupos_para_analise, ops_analise, hora_inicio, hora_fim, int
     relatorio += gerar_secao_periodo(hora_inicio, hora_fim, intervalo, tempo_disponivel)
     
     # Calcula métricas gerais
-    metricas_gerais = calcular_metricas_gerais(grupos_para_analise, tempo_disponivel)
+    metricas_gerais = calcular_metricas_gerais(grupos_para_analise, ops_analise, tempo_disponivel)
     
-    # Seção de resumo geral - COM DESTAQUE NA EFICIÊNCIA
-    relatorio += gerar_secao_resumo_geral(metricas_gerais)
+    # Seção de resumo geral - NOVA ESTRUTURA
+    relatorio += gerar_secao_resumo_geral_corrigido(metricas_gerais, tempo_disponivel)
     
-    # Seção de análise por OP - MELHORADA
+    # NOVA: Seção de médias gerais simplificada
     if ops_analise:
-        relatorio += gerar_secao_ops_melhorada(ops_analise, grupos_para_analise)
+        relatorio += gerar_secao_medias_gerais_simplificada(ops_analise)
     
-    # REMOVIDO: Seção detalhada por grupo (redundante conforme solicitado)
+    # Seção de análise por OP - CORRIGIDA
+    if ops_analise:
+        relatorio += gerar_secao_ops_corrigida(ops_analise, grupos_para_analise)
     
     return relatorio
 
 def calcular_tempo_disponivel(hora_inicio, hora_fim, intervalo):
-    """Calcula tempo disponível em minutos"""
-    def minutos(hora):
-        h, m = map(int, hora.split(':'))
-        return h * 60 + m
-    
-    inicio_min = minutos(hora_inicio)
-    fim_min = minutos(hora_fim)
-    return fim_min - inicio_min - intervalo
+    """Calcula tempo disponível em minutos, aceitando vários formatos de hora/data"""
+    import re
+    def extrair_hora_minuto(valor):
+        valor = valor.strip()
+        # Aceita 'HH:MM', 'dd/mm/yyyy HH:MM', 'dd/mm/yyyy - HH:MM', etc.
+        match = re.search(r"(\d{2}):(\d{2})$", valor)
+        if match:
+            h, m = int(match.group(1)), int(match.group(2))
+            return h * 60 + m
+        raise ValueError(f"Formato de hora inválido: {valor}")
+    inicio_min = extrair_hora_minuto(hora_inicio)
+    fim_min = extrair_hora_minuto(hora_fim)
+    return fim_min - inicio_min - int(intervalo)
 
 def gerar_secao_periodo(hora_inicio, hora_fim, intervalo, tempo_disponivel):
     """Gera seção do período de trabalho"""
@@ -50,86 +58,193 @@ def gerar_secao_periodo(hora_inicio, hora_fim, intervalo, tempo_disponivel):
     relatorio += f"Tempo Disponível: {tempo_disponivel} min ({tempo_disponivel/60:.1f}h)\n\n"
     return relatorio
 
-def calcular_metricas_gerais(grupos_para_analise, tempo_disponivel):
-    """Calcula métricas gerais de todos os grupos"""
+def calcular_metricas_gerais(grupos_para_analise, ops_analise, tempo_disponivel):
+    """Calcula métricas gerais com as novas fórmulas"""
     metricas = {
-        'tempo_total_usado': 0,
-        'tempo_total_acerto': 0,  # MUDANÇA: Renomeado de tempo_total_setup
+        'tempo_total_producao': 0,
+        'tempo_total_acerto': 0,
         'qtd_total_produzida': 0,
-        'qtd_total_acerto': 0,
-        'velocidade_media_ponderada': 0,
-        'eficiencia_tempo': 0,
-        'velocidade_real': 0,
-        'eficiencia_velocidade': 0
+        'tempo_total_perdido_ganho': 0,
+        'eficiencia_producao': 0,
+        'eficiencia_acerto': 0,
+        'eficiencia_tempo_geral': 0,
+        'tempo_ocioso': 0
     }
-    
-    peso_total = 0
-    velocidade_ponderada = 0
-    
+    # Soma tempos diretamente dos detalhes dos eventos
+    tempo_total_producao = 0
+    tempo_total_acerto = 0
+    qtd_total_produzida = 0
     for dados in grupos_para_analise.values():
-        # Soma apenas tempos válidos
-        if dados['tem_producao']:
-            metricas['tempo_total_usado'] += dados['tempo_total_producao']
-            metricas['qtd_total_produzida'] += dados['qtd_produzida']
+        for detalhe in dados.get('detalhes_eventos', []):
+            if detalhe.get('is_producao'):
+                tempo_total_producao += detalhe.get('tempo_producao', 0)
+                qtd_total_produzida += detalhe.get('qtd_produzida', 0)
+            if detalhe.get('is_acerto'):
+                # Corrigido: usar tempo_producao para acerto (coluna Tempo)
+                tempo_total_acerto += detalhe.get('tempo_producao', 0)
+    metricas['tempo_total_producao'] = tempo_total_producao
+    metricas['tempo_total_acerto'] = tempo_total_acerto
+    metricas['qtd_total_produzida'] = qtd_total_produzida
+    # Tempo ocioso: tempo_disponivel - (tempo_total_producao + tempo_total_acerto)
+    metricas['tempo_ocioso'] = tempo_disponivel - (tempo_total_producao + tempo_total_acerto)
+
+    # Calcula atraso/ganho geral das OPs e eficiências
+    if ops_analise:
+        soma_atraso_ops = 0
+        soma_eficiencia_producao = 0
+        soma_eficiencia_acerto = 0
+        count_ops_producao = 0
+        count_ops_acerto = 0
         
-        if dados['tem_acerto']:
-            metricas['tempo_total_acerto'] += dados['tempo_setup']  # Soma real do tempo de acerto
-            metricas['qtd_total_acerto'] += dados['qtd_acerto']
+        for op_key, grupos_op in ops_analise.items():
+            dados_op = consolidar_dados_op(grupos_op)
+            
+            # Calcula atraso/ganho da produção desta OP
+            if dados_op['tempo_producao'] > 0 and dados_op['velocidade_nominal'] > 0:
+                tempo_programado_producao = (dados_op['qtd_produzida'] / dados_op['velocidade_nominal']) * 60
+                atraso_producao = dados_op['tempo_producao'] - tempo_programado_producao
+                
+                # Calcula eficiência de produção desta OP (nova fórmula)
+                eficiencia_producao_op = ((tempo_programado_producao - dados_op['tempo_producao'] + tempo_programado_producao) / tempo_programado_producao) * 100
+                soma_eficiencia_producao += eficiencia_producao_op
+                count_ops_producao += 1
+                
+                # Acumula no atraso geral
+                soma_atraso_ops += atraso_producao
+            
+            # NOVA LÓGICA PARA ACERTO - CORREÇÃO IMPLEMENTADA
+            tempo_setup_programado = calcular_tempo_setup_programado(dados_op['processo'])
+            if dados_op['tempo_setup'] > 0:
+                diferenca_setup = tempo_setup_programado - dados_op['tempo_setup']
+                
+                # NOVA REGRA: Só conta ganho se tiver produção na mesma OP
+                tem_producao_na_op = dados_op['tempo_producao'] > 0
+                
+                if diferenca_setup > 0:  # Seria ganho
+                    if tem_producao_na_op:
+                        # Tem produção: conta o ganho real
+                        atraso_acerto = -diferenca_setup  # Negativo = ganho
+                        eficiencia_acerto_op = ((tempo_setup_programado - dados_op['tempo_setup'] + tempo_setup_programado) / tempo_setup_programado) * 100
+                    else:
+                        # Não tem produção: considera 100% (sem ganho nem perda)
+                        atraso_acerto = 0  # Zero = sem ganho nem perda
+                        eficiencia_acerto_op = 100  # 100% = exato
+                else:  # É atraso
+                    # Atraso sempre conta, independente de ter produção
+                    atraso_acerto = -diferenca_setup  # Positivo = atraso
+                    eficiencia_acerto_op = ((tempo_setup_programado - dados_op['tempo_setup'] + tempo_setup_programado) / tempo_setup_programado) * 100
+                
+                soma_eficiencia_acerto += eficiencia_acerto_op
+                count_ops_acerto += 1
+                
+                # Acumula no atraso geral
+                soma_atraso_ops += atraso_acerto
         
-        # Calcula velocidade média ponderada
-        if dados['velocidade_nominal'] > 0 and dados['tempo_total_producao'] > 0:
-            peso_total += dados['tempo_total_producao']
-            velocidade_ponderada += dados['velocidade_nominal'] * dados['tempo_total_producao']
-    
-    # Calcula velocidade média ponderada
-    if peso_total > 0:
-        metricas['velocidade_media_ponderada'] = velocidade_ponderada / peso_total
-    
-    # Calcula eficiências
-    if tempo_disponivel > 0:
-        tempo_total_efetivo = metricas['tempo_total_usado'] + metricas['tempo_total_acerto']
-        metricas['eficiencia_tempo'] = (tempo_total_efetivo / tempo_disponivel * 100)
-    
-    if metricas['tempo_total_usado'] > 0:
-        metricas['velocidade_real'] = metricas['qtd_total_produzida'] / (metricas['tempo_total_usado']/60)
-    
-    if metricas['velocidade_media_ponderada'] > 0:
-        metricas['eficiencia_velocidade'] = (metricas['velocidade_real'] / metricas['velocidade_media_ponderada'] * 100)
+        # Calcula médias das eficiências
+        if count_ops_producao > 0:
+            metricas['eficiencia_producao'] = soma_eficiencia_producao / count_ops_producao
+        
+        if count_ops_acerto > 0:
+            metricas['eficiencia_acerto'] = soma_eficiencia_acerto / count_ops_acerto
+        
+        # Tempo total perdido/ganho = soma atrasos OPs + tempo ocioso
+        metricas['tempo_total_perdido_ganho'] = soma_atraso_ops + metricas['tempo_ocioso']
+        
+        # Eficiência de tempo geral (fórmula corrigida)
+        if tempo_disponivel > 0:
+            tempo_efetivo_final = tempo_disponivel - metricas['tempo_total_perdido_ganho']
+            metricas['eficiencia_tempo_geral'] = (tempo_efetivo_final / tempo_disponivel) * 100
     
     return metricas
 
-def gerar_secao_resumo_geral(metricas):
-    """Gera seção do resumo geral COM DESTAQUE NA EFICIÊNCIA DE TEMPO"""
+def gerar_secao_resumo_geral_corrigido(metricas, tempo_disponivel):
+    """Gera seção do resumo geral com nova estrutura"""
     relatorio = "📈 RESUMO GERAL\n"
     relatorio += "─" * 40 + "\n"
-    relatorio += f"Tempo Total Produção: {metricas['tempo_total_usado']} min ({metricas['tempo_total_usado']/60:.1f}h)\n"
-    relatorio += f"Tempo de Acerto: {metricas['tempo_total_acerto']} min ({metricas['tempo_total_acerto']/60:.1f}h)\n"  # MUDANÇA: Renomeado
-    relatorio += f"Quantidade Total Produzida: {metricas['qtd_total_produzida']:,.0f} peças\n"
+    relatorio += f"Tempo Total Produção: {metricas['tempo_total_producao']} min ({metricas['tempo_total_producao']/60:.1f}h)\n"
+    relatorio += f"Tempo Total de Acerto: {metricas['tempo_total_acerto']} min ({metricas['tempo_total_acerto']/60:.1f}h)\n"
+    # CORREÇÃO: Remover o espaço entre vírgula e ponto na formatação
+    relatorio += f"Quantidade Total Produzida: {metricas['qtd_total_produzida']:,.0f} unidades\n"
+    # Tempo total perdido ou ganho
+    if metricas['tempo_total_perdido_ganho'] >= 0:
+        relatorio += f"Tempo Total Perdido: {metricas['tempo_total_perdido_ganho']:.0f} min\n"
+    else:
+        relatorio += f"Tempo Total Ganho: {abs(metricas['tempo_total_perdido_ganho']):.0f} min\n"
+    relatorio += f"Eficiência de Produção: {metricas['eficiencia_producao']:.1f}%\n"
+    relatorio += f"Eficiência de Acerto: {metricas['eficiencia_acerto']:.1f}%\n"
+    relatorio += f"Tempo Ocioso: {metricas['tempo_ocioso']} min ({metricas['tempo_ocioso']/60:.1f}h)\n"
+    # Eficiência de tempo geral - DESTACADA
+    relatorio += "\n🎯 " + "="*60 + "\n"
+    relatorio += f"║        EFICIÊNCIA DE TEMPO GERAL: {metricas['eficiencia_tempo_geral']:.2f}% {obter_classificacao_eficiencia(metricas['eficiencia_tempo_geral'])}        ║\n"
+    relatorio += "🎯 " + "="*60 + "\n\n"
+    return relatorio
+
+def gerar_secao_medias_gerais_simplificada(ops_analise):
+    """Seção simplificada das médias gerais"""
+    relatorio = "🎯 MÉDIAS GERAIS DE TODAS AS OPs\n"
+    relatorio += "=" * 60 + "\n"
     
-    if metricas['qtd_total_acerto'] > 0:
-        relatorio += f"Quantidade Total Acerto: {metricas['qtd_total_acerto']:,.0f} peças\n"
+    # Calcula apenas a média de acerto COM NOVA LÓGICA
+    total_tempo_setup_programado = 0
+    total_tempo_setup_utilizado = 0
+    total_eficiencia_acerto = 0
+    count_ops_acerto = 0
     
-    # DESTAQUE ESPECIAL PARA EFICIÊNCIA DE TEMPO
-    relatorio += "\n" + "🎯 " + "="*50 + "\n"
-    relatorio += f"║  EFICIÊNCIA DE TEMPO: {metricas['eficiencia_tempo']:.1f}% {obter_classificacao_eficiencia(metricas['eficiencia_tempo'])} ║\n"
-    relatorio += "🎯 " + "="*50 + "\n\n"
+    for op_key, grupos_op in ops_analise.items():
+        dados_op = consolidar_dados_op(grupos_op)
+        
+        # Calcula tempo de setup programado para esta OP
+        tempo_setup_programado = calcular_tempo_setup_programado(dados_op['processo'])
+        
+        if dados_op['tempo_setup'] > 0:
+            diferenca_setup = tempo_setup_programado - dados_op['tempo_setup']
+            tem_producao_na_op = dados_op['tempo_producao'] > 0
+            
+            if diferenca_setup > 0:  # Seria ganho
+                if tem_producao_na_op:
+                    # Tem produção: conta o ganho real
+                    eficiencia_acerto_op = ((tempo_setup_programado - dados_op['tempo_setup'] + tempo_setup_programado) / tempo_setup_programado) * 100
+                    total_tempo_setup_programado += tempo_setup_programado
+                    total_tempo_setup_utilizado += dados_op['tempo_setup']
+                else:
+                    # Não tem produção: considera 100%
+                    eficiencia_acerto_op = 100
+                    total_tempo_setup_programado += tempo_setup_programado
+                    total_tempo_setup_utilizado += tempo_setup_programado  # Como se fosse exato
+            else:  # É atraso
+                # Atraso sempre conta
+                eficiencia_acerto_op = ((tempo_setup_programado - dados_op['tempo_setup'] + tempo_setup_programado) / tempo_setup_programado) * 100
+                total_tempo_setup_programado += tempo_setup_programado
+                total_tempo_setup_utilizado += dados_op['tempo_setup']
+            
+            total_eficiencia_acerto += eficiencia_acerto_op
+            count_ops_acerto += 1
     
-    relatorio += f"Velocidade Real: {metricas['velocidade_real']:,.0f} p/h\n"
-    relatorio += f"Velocidade Nominal Média: {metricas['velocidade_media_ponderada']:,.0f} p/h\n"
-    relatorio += f"Eficiência de Velocidade: {metricas['eficiencia_velocidade']:.1f}%\n\n"
+    if count_ops_acerto > 0:
+        media_acerto_percent = total_eficiencia_acerto / count_ops_acerto
+        diferenca_acerto = total_tempo_setup_programado - total_tempo_setup_utilizado
+        
+        relatorio += "⚙️ MÉDIA DE ACERTO (com nova lógica):\n"
+        relatorio += f"  • Média de Acerto: {media_acerto_percent:.1f}%\n"
+        
+        if diferenca_acerto > 0:
+            relatorio += f"  • Tempo economizado: {diferenca_acerto} min\n"
+            relatorio += f"  • Observação: Ganhos só contam quando há produção na mesma OP\n\n"
+        else:
+            relatorio += f"  • Tempo perdido: {abs(diferenca_acerto)} min\n\n"
     
     return relatorio
 
-def gerar_secao_ops_melhorada(ops_analise, grupos_para_analise):
-    """Gera seção de análise por OP com melhorias solicitadas"""
-    relatorio = "🎯 ANÁLISE POR ORDEM DE PRODUÇÃO\n"
+def gerar_secao_ops_corrigida(ops_analise, grupos_para_analise):
+    """Gera seção de análise por OP com fórmulas corrigidas"""
+    relatorio = "🎯 ANÁLISE DETALHADA POR ORDEM DE PRODUÇÃO\n"
     relatorio += "=" * 80 + "\n\n"
     
     for op_key, grupos_op in ops_analise.items():
-        # CORREÇÃO: Mantém formato original dos números (118.951, 119.000)
+        # Mantém formato original dos números
         op_numero_original = extrair_op_numero_original(grupos_op)
         relatorio += f"📋 OP {op_numero_original}\n"
-        relatorio += "─" * 40 + "\n"
+        relatorio += "─" * 60 + "\n"
         
         # Consolida dados da OP
         dados_op = consolidar_dados_op(grupos_op)
@@ -137,26 +252,88 @@ def gerar_secao_ops_melhorada(ops_analise, grupos_para_analise):
         # Informações da OP
         relatorio += f"Cliente: {dados_op['cliente']}\n"  
         relatorio += f"Processo: {dados_op['processo']}\n"
+        
+        # Calcula tempo de setup programado
+        tempo_setup_programado = calcular_tempo_setup_programado(dados_op['processo'])
+        
         relatorio += f"Tempo Produção: {dados_op['tempo_producao']} min ({dados_op['tempo_producao']/60:.1f}h)\n"
+        relatorio += f"Tempo de Setup Programado: {tempo_setup_programado} min\n"
+        relatorio += f"Tempo de Setup Utilizado: {dados_op['tempo_setup']} min\n"
         
-        # MELHORIA: Mostrar tempo de setup disponível vs utilizado
-        tempo_setup_disponivel = calcular_tempo_setup_disponivel(dados_op['processo'])
+        # NOVA LÓGICA PARA MOSTRAR GANHO/PERDA
+        diferenca_acerto = tempo_setup_programado - dados_op['tempo_setup']
+        tem_producao_na_op = dados_op['tempo_producao'] > 0
+        
+        if diferenca_acerto > 0:  # Seria ganho
+            if tem_producao_na_op:
+                relatorio += f"Ganho de Setup: {diferenca_acerto} min (VÁLIDO - há produção)\n"
+            else:
+                relatorio += f"Setup aparentemente ganho: {diferenca_acerto} min (NÃO VÁLIDO - sem produção, conta como 100%)\n"
+        elif diferenca_acerto < 0:
+            relatorio += f"Perda de Setup: {abs(diferenca_acerto)} min (VÁLIDO - atraso sempre conta)\n"
+        else:
+            relatorio += f"Setup no tempo exato.\n"
+        
+        # CORREÇÃO: Usar formatação correta para quantidade produzida
+        relatorio += f"Qtd Produzida: {dados_op['qtd_produzida']:,.0f}\n\n"
+        
+        # Inicialização para evitar erro de variável não associada
+        media_producao_op = 0.0
+        minutos_diferenca_producao = 0.0
+        # NOVA FÓRMULA DE PRODUÇÃO
+        if dados_op['tempo_producao'] > 0 and dados_op['velocidade_nominal'] > 0:
+            # Tempo programado de produção
+            tempo_programado_producao = (dados_op['qtd_produzida'] / dados_op['velocidade_nominal']) * 60
+            
+            # Nova fórmula: (tempo programado - tempo utilizado + tempo programado) / tempo programado * 100
+            media_producao_op = ((tempo_programado_producao - dados_op['tempo_producao'] + tempo_programado_producao) / tempo_programado_producao) * 100
+            minutos_diferenca_producao = tempo_programado_producao - dados_op['tempo_producao']
+            
+            relatorio += "📊 MÉDIA DE PRODUÇÃO DA OP:\n"
+            relatorio += f"  • {media_producao_op:.2f}%\n"
+            
+            if minutos_diferenca_producao > 0:
+                relatorio += f"  • Minutos ganhos: {minutos_diferenca_producao:.0f} min\n\n"
+            else:
+                relatorio += f"  • Minutos perdidos: {abs(minutos_diferenca_producao):.0f} min\n\n"
+        
+        # NOVA FÓRMULA DE ACERTO COM LÓGICA CORRIGIDA
         if dados_op['tempo_setup'] > 0:
-            relatorio += f"Tempo de Setup: {tempo_setup_disponivel} min\n"  # Disponível
-            relatorio += f"Tempo de Setup Utilizado: {dados_op['tempo_setup']} min ({dados_op['tempo_setup']/60:.1f}h)\n"  # Real utilizado
+            if diferenca_acerto > 0:  # Seria ganho
+                if tem_producao_na_op:
+                    # Tem produção: conta o ganho real
+                    media_acerto_op = ((tempo_setup_programado - dados_op['tempo_setup'] + tempo_setup_programado) / tempo_setup_programado) * 100
+                    relatorio += "⚙️ MÉDIA DE ACERTO DA OP:\n"
+                    relatorio += f"  • {media_acerto_op:.1f}%\n"
+                    relatorio += f"  • Minutos ganhos: {diferenca_acerto} min (VÁLIDO)\n\n"
+                else:
+                    # Não tem produção: considera 100%
+                    media_acerto_op = 100.0
+                    relatorio += "⚙️ MÉDIA DE ACERTO DA OP:\n"
+                    relatorio += f"  • {media_acerto_op:.1f}% (considerado como exato - sem produção)\n"
+                    relatorio += f"  • Observação: Ganho não contabilizado pois não há produção\n\n"
+            else:  # É atraso
+                # Atraso sempre conta
+                media_acerto_op = ((tempo_setup_programado - dados_op['tempo_setup'] + tempo_setup_programado) / tempo_setup_programado) * 100
+                relatorio += "⚙️ MÉDIA DE ACERTO DA OP:\n"
+                relatorio += f"  • {media_acerto_op:.1f}%\n"
+                relatorio += f"  • Minutos perdidos: {abs(diferenca_acerto)} min (VÁLIDO)\n\n"
+            
+            # MÉDIA FINAL DA OP
+            if dados_op['tempo_producao'] > 0:
+                media_final_op = (media_producao_op + media_acerto_op) / 2
+                
+                relatorio += "🎯 MÉDIA FINAL DA OP:\n"
+                relatorio += f"  • Média: {media_final_op:.1f}% {obter_classificacao_eficiencia(media_final_op)}\n"
+                relatorio += f"  • Fórmula: {media_producao_op:.1f}% + {media_acerto_op:.1f}% / 2 = {media_final_op:.1f}%\n"
+                relatorio += f"    - Produção: {minutos_diferenca_producao:.0f} min\n"
+                relatorio += f"    - Acerto: {diferenca_acerto} min\n\n"
+        else:
+            if dados_op['tempo_producao'] > 0:
+                relatorio += f"🎯 EFICIÊNCIA DA OP (apenas produção): {media_producao_op:.1f}% {obter_classificacao_eficiencia(media_producao_op)}\n\n"
         
-        relatorio += f"Qtd Produzida: {dados_op['qtd_produzida']:,.0f} peças\n"
-        
-        if dados_op['qtd_acerto'] > 0:
-            relatorio += f"Qtd Acerto: {dados_op['qtd_acerto']:,.0f} peças\n"
-        
-        if dados_op['tempo_producao'] > 0:
-            relatorio += f"Velocidade Real: {dados_op['velocidade_real']:,.0f} p/h\n"
-            relatorio += f"Velocidade Nominal: {dados_op['velocidade_nominal']:,.0f} p/h\n"
-            relatorio += f"Eficiência: {dados_op['eficiencia']:.1f}% {obter_classificacao_eficiencia(dados_op['eficiencia'])}\n"
-        
-        # MELHORIA: Formato simplificado dos grupos
-        relatorio += "\n📁 Grupos desta OP:\n"
+        # Formato simplificado dos grupos
+        relatorio += "📁 Grupos desta OP:\n"
         grupos_acerto = []
         grupos_producao = []
         
@@ -174,32 +351,39 @@ def gerar_secao_ops_melhorada(ops_analise, grupos_para_analise):
         if grupos_producao:
             relatorio += f"  • Produção: linha(s) {', '.join(grupos_producao)}\n"
         
-        relatorio += "\n"
+        relatorio += "\n" + "="*60 + "\n\n"
     
     return relatorio
 
 def extrair_op_numero_original(grupos_op):
-    """Extrai o número original da OP mantendo formato (118.951, 119.000)"""
+    """Extrai o número original da OP mantendo formato"""
     for nome_grupo, dados in grupos_op:
         os_original = dados.get('os_original', '') or dados.get('os', '')
         if os_original:
             return os_original
     return "N/A"
 
-def calcular_tempo_setup_disponivel(processo):
-    """Calcula tempo de setup disponível baseado no processo (placeholder)"""
-    # Esta função pode ser expandida com lógica específica
-    # Por enquanto, retorna um valor baseado no tipo de processo
+def calcular_tempo_setup_programado(processo):
+    """Calcula tempo de setup programado baseado no processo e configurações"""
     if not processo:
-        return 120  # Padrão de 2 horas
+        return tempos_setup.get('default', 180)
     
-    # Pode implementar lógica específica baseada no processo
-    if "FUNDO AUTOMÁ" in processo:
-        return 130
-    elif "COLAGEM" in processo:
-        return 180
+    processo_lower = processo.lower()
+    
+    # Mapeia processos para configurações
+    if "berço" in processo_lower or "berco" in processo_lower:
+        return tempos_setup.get('berco', 180)
+    elif "fundo automá" in processo_lower or "fundo automa" in processo_lower:
+        return tempos_setup.get('fundo_automatico_primeiro', 130)
+    elif "colagem" in processo_lower:
+        if "bandeja" in processo_lower:
+            return tempos_setup.get('colagem_bandeja', 130)
+        elif "lateral" in processo_lower:
+            return tempos_setup.get('colagem_lateral_primeiro', 130)
+        else:
+            return tempos_setup.get('colagem_bandeja', 130)
     else:
-        return 120
+        return tempos_setup.get('default', 180)
 
 def consolidar_dados_op(grupos_op):
     """Consolida dados de todos os grupos de uma OP"""
@@ -210,14 +394,17 @@ def consolidar_dados_op(grupos_op):
         'qtd_acerto': 0,
         'velocidade_nominal': 0,
         'cliente': "",
-        'processo': "",
-        'velocidade_real': 0,
-        'eficiencia': 0
+        'processo': ""
     }
     
     for nome_grupo, dados in grupos_op:
         dados_op['tempo_producao'] += dados['tempo_total_producao']
-        dados_op['tempo_setup'] += dados['tempo_setup']
+        # CORREÇÃO: Somar o tempo real de setup dos detalhes de eventos
+        # em vez de usar o campo tempo_setup que pode estar incorreto
+        for detalhe in dados.get('detalhes_eventos', []):
+            if detalhe.get('is_acerto'):
+                dados_op['tempo_setup'] += detalhe.get('tempo_producao', 0)
+        
         dados_op['qtd_produzida'] += dados['qtd_produzida']
         dados_op['qtd_acerto'] += dados['qtd_acerto']
         
@@ -228,12 +415,6 @@ def consolidar_dados_op(grupos_op):
             dados_op['cliente'] = dados['cliente']
         if dados['processo'] and not dados_op['processo']:
             dados_op['processo'] = dados['processo']
-    
-    # Calcula velocidade real e eficiência
-    if dados_op['tempo_producao'] > 0:
-        dados_op['velocidade_real'] = dados_op['qtd_produzida'] / (dados_op['tempo_producao']/60)
-        if dados_op['velocidade_nominal'] > 0:
-            dados_op['eficiencia'] = dados_op['velocidade_real'] / dados_op['velocidade_nominal'] * 100
     
     return dados_op
 

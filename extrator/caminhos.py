@@ -6,11 +6,12 @@ def construir_caminho_pdf(data, maquina):
     try:
         # OPÇÃO 1: Detecta automaticamente o sistema operacional
         sistema = platform.system()
-        
+        # Caminho base adaptável para Linux e Windows
         if sistema == "Linux":
-            base_dir = "/home/koga/Documentos/AnalisadorProducao/RELATORIOS PRODUTIVIDADE/pdf"
+            # Caminho correto para seu novo local
+            base_dir = "/home/koga/wilmar/AnalisadorProducao/RELATORIOS PRODUTIVIDADE/pdf"
         elif sistema == "Windows":
-            base_dir = r"C:\Users\Usuario\Desktop\WILMAR\AnalisadorProducao\RELATORIOS PRODUTIVIDADE\pdf"
+            base_dir = r"C:\\Users\\Usuario\\Desktop\\WILMAR\\AnalisadorProducao\\RELATORIOS PRODUTIVIDADE\\pdf"
         else:
             # Fallback para outros sistemas
             base_dir = os.path.join(os.path.expanduser("~"), "RELATORIOS PRODUTIVIDADE", "pdf")

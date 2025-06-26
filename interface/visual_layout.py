@@ -51,7 +51,8 @@ def configurar_colunas_da_tabela(tabela, headers_alfabeticos, colunas_reais):
     for header, nome_real in zip(headers_alfabeticos, colunas_reais):
         largura_nome = len(nome_real) * 9
         largura_minima = max(120, largura_nome)
-        
+        if nome_real.lower() == 'velocidade':
+            largura_minima = 120
         tabela.heading(header, text=nome_real)  # Só o nome real
         tabela.column(header, width=largura_minima, anchor="center", stretch=True)
 

@@ -52,7 +52,7 @@ def eh_producao(evento):
     return any(palavra in evento_str for palavra in palavras_producao)
 
 def extrair_op_numero(os_value):
-    """Extrai número da OP/OS de forma mais robusta"""
+    """Extrai número da OP/OS de forma mais robusta (versão limpa)"""
     if not os_value or str(os_value) == '0' or str(os_value).lower() == 'nan':
         return None
     
@@ -62,12 +62,19 @@ def extrair_op_numero(os_value):
     if os_str.isdigit():
         return os_str
     
-    # Busca padrões como "OP 123", "119.000", etc.
-    match = re.search(r'(?:OP\s*)?(\d+)(?:\.\d+)?', os_str, re.IGNORECASE)
-    if match:
-        return match.group(1)
+    # Remove pontos e busca apenas números
+    os_limpo = re.sub(r'[^\d]', '', os_str)
+    if os_limpo:
+        return os_limpo
     
     return os_str
+
+def extrair_op_numero_original(os_value):
+    """Mantém o formato original da OP (118.951, 119.000, etc.)"""
+    if not os_value or str(os_value) == '0' or str(os_value).lower() == 'nan':
+        return None
+    
+    return str(os_value).strip()
 
 def extrair_quantidades_melhorada(row, df):
     """Extrai quantidades de forma mais precisa, separando produzida de recebida"""
@@ -115,3 +122,26 @@ def validar_dados_linha(row, df):
                 break
     
     return tempo_valido
+
+def calcular_eficiencia_tempo_geral(tempo_utilizado_total, tempo_disponivel):
+    """
+    Calcula a eficiência de tempo geral conforme solicitado:
+    Fórmula: tempo_utilizado / tempo_disponivel * 100
+    """
+    if tempo_disponivel <= 0:
+        return 0
+    
+    return (tempo_utilizado_total / tempo_disponivel) * 100
+
+def formatar_tempo_minutos(minutos):
+    """Formata minutos para formato HH:MM"""
+    if minutos <= 0:
+        return "00:00"
+    
+    horas = int(minutos // 60)
+    mins = int(minutos % 60)
+    return f"{horas:02d}:{mins:02d}"
+
+def calcular_diferenca_setup(tempo_programado, tempo_utilizado):
+    """Calcula diferença entre tempo programado e utilizado"""
+    return tempo_programado - tempo_utilizado
