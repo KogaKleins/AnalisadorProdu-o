@@ -7,42 +7,71 @@ import pandas as pd
 from tkinter import messagebox
 import tkinter as tk
 from src.interface import globals
+import os
 
 # Importações específicas (evita importações totais que forçam o __init__.py)
 from core.extractor.file_finder import construir_caminho_pdf
 from core.extractor.pdf_extractor import extrair_dados_pdf
 from core.config.setup_config import get_setup_time
-from core.data.data_processor import process_data, validate_data
+from core.data.data_processor import process_data, validate_data, calculate_setup_times, extrair_media_producao
 from core.data.group_manager import GroupManager
+from src.core.metrics.utils import limpar_setup_op_sem_acerto
 
 from .table_handler import configurar_colunas_da_tabela, carregar_dados_na_tabela
 
+# Mapeamento de abreviações para nomes completos de máquinas
+MACHINE_ALIASES = {
+    'b': 'bobst',
+    'bobst': 'bobst',
+    'k': 'komori',
+    'komori': 'komori',
+    'f': 'furnax',
+    'furnax': 'furnax',
+    'cv': 'cv manual',
+    'cv manual': 'cv manual',
+    'h': 'hcd',
+    'hcd': 'hcd',
+    's': 'samkoon',
+    'samkoon': 'samkoon',
+    'l': 'laminadora',
+    'laminadora': 'laminadora',
+    'v': 'verniz.uv sakurai',
+    'verniz.uv sakurai': 'verniz.uv sakurai',
+    'sbl': 'sbl',
+    'sbl': 'sbl',
+}
+
 def carregar_dados_wrapper():
     """Wrapper para carregar dados a partir dos campos da interface"""
-    data = globals.entrada_data.get()
-    maquina = globals.entrada_maquina.get()
+    data = globals.entrada_data.get() if getattr(globals, 'entrada_data', None) is not None else ''
+    maquina = globals.entrada_maquina.get() if getattr(globals, 'entrada_maquina', None) is not None else ''
     carregar_dados(data, maquina)
 
 def carregar_dados(data, maquina):
     """Carrega os dados do arquivo PDF"""
-    
     if not data or not maquina:
         messagebox.showwarning("Atenção", "Preencha a data e a máquina.")
         return
 
     try:
         caminho_pdf = construir_caminho_pdf(data, maquina)
+        if not os.path.isfile(caminho_pdf):
+            messagebox.showerror("Erro", f"PDF da máquina '{maquina}' não encontrado!\nCaminho: {caminho_pdf}")
+            # Limpa dados globais e tabela
+            globals.df_global = None
+            globals.linhas_agrupadas = {}
+            if globals.tabela:
+                for item in globals.tabela.get_children():
+                    globals.tabela.delete(item)
+            if globals.text_resultado:
+                globals.text_resultado.delete("1.0", tk.END)
+            return
         df = extrair_dados_pdf(caminho_pdf)
-        
         df = process_dataframe(df)
-        
         globals.df_global = df.copy()
         globals.linhas_agrupadas = {}
-        
-        # Corrigido: passar argumentos corretos
         configurar_colunas_da_tabela(globals.tabela, globals.df_global)
         carregar_dados_na_tabela(globals.tabela, globals.df_global)
-        
         if globals.text_resultado:
             globals.text_resultado.delete("1.0", tk.END)
             globals.text_resultado.insert(tk.END, 
@@ -59,10 +88,47 @@ def process_dataframe(df):
     df = df[1:].reset_index(drop=True)
     df.columns = header
 
-    if len(df.columns) >= 3:
-        df = insert_setup_column(df)
+    # Garante que a coluna 'Máquina' existe e está preenchida
+    valor_maquina = get_valor_maquina()
+    valor_maquina = valor_maquina.lower() if valor_maquina else ''
+    if 'Máquina' not in df.columns:
+        df.insert(2, 'Máquina', valor_maquina)  # Insere na posição 2 (após 'Término')
+    else:
+        df['Máquina'] = df['Máquina'].fillna('').replace('', valor_maquina)
+        df['Máquina'] = df['Máquina'].apply(lambda x: valor_maquina if not x or (isinstance(x, str) and x.strip() == '') else (x.lower() if isinstance(x, str) else x))
+
+    # Garante que a coluna 'Tempo Setup' existe e está visível
+    if 'Tempo Setup' not in df.columns:
+        df.insert(3, 'Tempo Setup', '')  # Insere após 'Máquina'
+
+    # Garante que a coluna 'Média Produção' existe e está visível
+    if 'Média Produção' not in df.columns:
+        df.insert(4, 'Média Produção', '')  # Insere após 'Tempo Setup'
 
     df = calculate_setup_times(df)
+
+    # Se for Furnax, preenche os campos especiais após o cálculo genérico
+    if valor_maquina == 'furnax':
+        from src.core.metrics.maquinas.furnax import preencher_campos_furnax
+        df = preencher_campos_furnax(df)
+    elif valor_maquina == 'sbl':
+        from src.core.metrics.maquinas.sbl import preencher_campos_sbl
+        df = preencher_campos_sbl(df)
+
+    # Limpa tempo de setup de OPs sem acerto (universal para todas as máquinas)
+    df = limpar_setup_op_sem_acerto(df)
+
+    # Reorganiza as colunas para garantir que 'Tempo Setup' e 'Média Produção' fiquem sempre visíveis e lado a lado
+    cols = df.columns.tolist()
+    if 'Tempo Setup' in cols and 'Média Produção' in cols:
+        idx_setup = cols.index('Tempo Setup')
+        idx_media = cols.index('Média Produção')
+        if idx_media != idx_setup + 1:
+            # Remove 'Média Produção' e insere logo após 'Tempo Setup'
+            cols.pop(idx_media)
+            cols.insert(idx_setup + 1, 'Média Produção')
+            df = df[cols]
+
     return df
 
 def insert_setup_column(df):
@@ -80,46 +146,20 @@ def insert_setup_column(df):
 
     return df_novo
 
-def calculate_setup_times(df):
-    """Calcula os tempos de setup para cada linha"""
-    os_anteriores_por_processo = {}
-
-    for idx, row in df.iterrows():
-        processo = ""
-        for col in df.columns:
-            if "processo" in str(col).lower():
-                processo = str(row.get(col, ""))
-                break
-
-        os_value = ""
-        for col in df.columns:
-            if col.upper() == "OS" or "os" in str(col).lower():
-                os_value = str(row.get(col, ""))
-                break
-
-        evento = ""
-        for col in df.columns:
-            if "evento" in str(col).lower():
-                evento = str(row.get(col, "")).strip().lower()
-                break
-
-        if processo and evento and evento != "produção":
-            eventos_setup = ["acerto", "setup", "ajuste", "troca", "preparação"]
-            is_evento_setup = any(termo in evento for termo in eventos_setup)
-
-            if is_evento_setup:
-                tipo_processo = processo.lower()
-                is_first = tipo_processo not in os_anteriores_por_processo
-
-                tempo_setup = get_setup_time(processo, is_first)
-                df.at[idx, 'Tempo Setup'] = f"{tempo_setup//60}:{tempo_setup%60:02d}"
+def get_valor_maquina():
+    em = getattr(globals, 'entrada_maquina', None)
+    get_method = getattr(em, 'get', None)
+    if callable(get_method):
+        try:
+            valor = get_method()
+            if valor is not None:
+                valor = str(valor).strip().lower()
+                return MACHINE_ALIASES.get(valor, valor)
             else:
-                df.at[idx, 'Tempo Setup'] = ""
-        else:
-            df.at[idx, 'Tempo Setup'] = ""
-
-        if processo and os_value and os_value != "0" and os_value.strip():
-            tipo_processo = processo.lower()
-            os_anteriores_por_processo[tipo_processo] = os_value
-
-    return df
+                return ''
+        except Exception:
+            return ''
+    elif em:
+        valor = str(em).strip().lower() if hasattr(em, 'strip') else str(em).lower()
+        return MACHINE_ALIASES.get(valor, valor)
+    return ''

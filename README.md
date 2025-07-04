@@ -1,164 +1,104 @@
 # Analisador de Produção
 
+[![Python](https://img.shields.io/badge/python-3.8%2B-blue.svg)](https://www.python.org/downloads/)
+[![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+
 Sistema para análise de dados de produção industrial com geração de relatórios de desempenho.
+
+---
+
+![Screenshot da Interface](docs/screenshot_interface.png)
 
 ## Descrição
 Sistema desenvolvido para analisar dados de produção industrial, processando relatórios de máquinas e gerando análises detalhadas de desempenho, eficiência e produtividade.
 
-## Recursos
+## Principais Recursos
 - Extração de dados de PDFs de relatórios de produção
-- Interface gráfica intuitiva
+- Interface gráfica intuitiva e moderna (Tkinter)
 - Análise de eficiência de produção
-- Geração de relatórios detalhados
+- Geração de relatórios detalhados e visuais
 - Agrupamento de dados por ordem de produção
 - Cálculos de tempo de setup e produção
+- **Campos de período de trabalho inteligentes:** aceitam tanto hora (`08:00`) quanto data+hora (`06/06/2025 06:00`), com formatação automática
+- Exportação para CSV, Excel e PDF
 
-## Estrutura Completa do Projeto
+## Instalação e Execução
+
+1. **Clone o repositório:**
+   ```bash
+   git clone <url-do-repositorio>
+   cd AnalisadorProducao
+   ```
+2. **Crie o ambiente virtual (opcional, mas recomendado):**
+   ```bash
+   python -m venv venv
+   # Ative o ambiente:
+   # No Windows:
+   venv\Scripts\activate
+   # No Linux/Mac:
+   source venv/bin/activate
+   ```
+3. **Instale as dependências:**
+   ```bash
+   pip install -r requirements.txt
+   ```
+4. **Execute o sistema:**
+   ```bash
+   python main.py
+   ```
+
+## Como Usar
+
+- **Carregue os dados** informando a data e a máquina, depois clique em "Carregar Dados".
+- **Período de Trabalho:**
+  - Os campos de início e fim aceitam tanto hora (`08:00`) quanto data+hora (`06/06/2025 06:00`).
+  - Você pode digitar apenas números e o campo será formatado automaticamente (ex: `060620250600` vira `06/06/2025 06:00`).
+  - O campo é adaptável e largo para caber toda a informação.
+- **Agrupe, desagrupe e edite linhas** usando os botões da interface.
+- **Calcule o desempenho** e gere relatórios detalhados com um clique.
+- **Exporte os dados** para CSV, Excel ou PDF.
+
+## Estrutura do Projeto (resumida)
 
 ```
-ARVORE_PROJETO.md
-README.md
-analisador.log
-DejaVuSans.ttf
-main.py
-pyproject.toml
-requirements.txt
-setup.py
-config/
-    setup_config.py
-    __pycache__/
-        setup_config.cpython-313.pyc
-data/
-    data_handler.py
-    group_manager.py
-    performance_calculator.py
-    __pycache__/
-        data_handler.cpython-313.pyc
-        group_manager.cpython-313.pyc
-        performance_calculator.cpython-313.pyc
-    metrics/
-        agrupamento.py
-        __init__.py
-        relatorio.py
-        utils.py
-        __pycache__/
-            agrupamento.cpython-313.pyc
-            relatorio.cpython-313.pyc
-            utils.cpython-313.pyc
-docs/
-extrator/
-    __init__.py
-    caminhos.py
-    extrator_pdf.py
-    __pycache__/
-        __init__.cpython-313.pyc
-        caminhos.cpython-313.pyc
-        extrator_pdf.cpython-313.pyc
-interface/
-    __init__.py
-    formatters.py
-    globals.py
-    table_manager.py
-    terminal_panel.py
-    ui_setup.py
-    visual_layout.py
-    __pycache__/
-        __init__.cpython-313.pyc
-        formatters.cpython-313.pyc
-        globals.cpython-313.pyc
-        janela_principal.cpython-313.pyc
-        table_manager.cpython-313.pyc
-        terminal_panel.cpython-313.pyc
-        ui_setup.cpython-313.pyc
-        visual_layout.cpython-313.pyc
-RELATORIOS PRODUTIVIDADE/
-    pdf/
-        abril/
-            15/
-        junho/
-            06/
-            09/
-            10/
-            11/
-            12/
-            13/
-src/
-    __init__.py
-    __pycache__/
-        __init__.cpython-313.pyc
-    core/
-        __init__.py
-        __pycache__/
-            __init__.cpython-313.pyc
-        config/
-            setup_config.py
-            __pycache__/
-        data/
-            __init__.py
-            data_processor.py
-            group_manager.py
-            __pycache__/
-        extractor/
-            __init__.py
-            file_finder.py
-            pdf_extractor.py
-            __pycache__/
-        metrics/
-            calculator.py
-            __pycache__/
-            maquinas/
-            report/
-    interface/
-        __init__.py
-        globals.py
-        __pycache__/
-            __init__.cpython-313.pyc
-            globals.cpython-313.pyc
-        components/
-            __init__.py
-            main_window.py
-            table.py
-            terminal.py
-            toolbar.py
-            __pycache__/
-        handlers/
-            __init__.py
-            config_handler.py
-            data_handler.py
-            event_handler.py
-            formatters.py
-            group_handler.py
-            table_handler.py
-            __pycache__/
-        utils/
-    utils/
-        __init__.py
-        formatters.py
-        validators.py
-tests/
+AnalisadorProducao/
+├── main.py
+├── requirements.txt
+├── README.md
+├── src/
+│   ├── core/
+│   │   ├── config/
+│   │   ├── data/
+│   │   ├── extractor/
+│   │   └── metrics/
+│   └── interface/
+│       ├── components/
+│       ├── handlers/
+│       └── utils/
+├── RELATORIOS PRODUTIVIDADE/
+│   └── pdf/
+└── ...
 ```
 
-## Interface Gráfica
+## Testes
 
-A interface principal é montada em `interface/ui_setup.py` e `interface/table_manager.py`.
+- Para rodar os testes (se houver):
+  ```bash
+  pytest src/tests/
+  ```
 
-### Botões e Ações
-Os botões principais ficam em um frame logo abaixo do período de trabalho:
+## Contribuindo
 
-- **🔗 Agrupar**: Agrupa as linhas selecionadas
-- **🔓 Desagrupar**: Desagrupa as linhas selecionadas
-- **📈 Calcular Desempenho**: Calcula os indicadores de produtividade
-- **➕ Nova Linha**: Insere uma nova linha na tabela
-- **🗑️ Deletar**: Deleta a(s) linha(s) selecionada(s)
-- **💾 Salvar**: Salva as alterações feitas na tabela
-- **📤 Exportar**: Exporta os dados editados para CSV/Excel
+Contribuições são bem-vindas! Para contribuir:
+1. Faça um fork do projeto
+2. Crie uma branch para sua feature/correção
+3. Envie um pull request
+4. Descreva claramente sua alteração
 
-### Organização dos Handlers
-- **Agrupamento/Desagrupamento**: `data/group_manager.py`
-- **Edição/Exportação de tabela**: `interface/table_manager.py`
-- **Cálculo de desempenho**: `data/performance_calculator.py` e `data/metrics/relatorio.py`
-- **Configuração de setup**: `config/setup_config.py`
+## Créditos
+- Desenvolvedor principal: [Wilmar]
+
 
 ---
 
-> **Nota:** Esta árvore reflete a estrutura real do workspace e serve como referência única e centralizada para desenvolvedores e usuários do projeto.
+> **Atualizado para aceitar datas e horas completas nos campos de período de trabalho, com formatação automática e campo adaptável.**

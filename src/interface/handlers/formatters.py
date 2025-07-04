@@ -54,21 +54,39 @@ def ao_digitar_data(widget, event=None):
     widget.insert(0, texto)
 
 def ao_digitar_hora_inicio(widget, event=None):
-    """
-    Validação para entrada de hora no formato HH:MM.
-    Atualiza o valor do widget Entry conforme o usuário digita.
-    """
     valor = widget.get()
-    texto = ''.join(c for c in valor if c.isdigit() or c == ':')
-    if len(texto) > 5:
-        texto = texto[:5]
-    if len(texto) > 2 and texto[2] != ':':
-        texto = texto[:2] + ':' + texto[2:]
+    # Remove tudo que não for número
+    numeros = ''.join(c for c in valor if c.isdigit())
+    novo = ''
+    # Formatação para dd/mm/yyyy HH:MM
+    if len(numeros) >= 2:
+        novo += numeros[:2]
+    if len(numeros) >= 4:
+        novo += '/' + numeros[2:4]
+    if len(numeros) >= 8:
+        novo += '/' + numeros[4:8]
+    if len(numeros) > 8:
+        novo += ' '
+        if len(numeros) >= 10:
+            novo += numeros[8:10]
+        if len(numeros) >= 12:
+            novo += ':' + numeros[10:12]
     widget.delete(0, 'end')
-    widget.insert(0, texto)
+    widget.insert(0, novo)
 
 def ao_digitar_hora_fim(widget, event=None):
-    """
-    Validação para entrada de hora final no formato HH:MM.
-    """
     ao_digitar_hora_inicio(widget, event)
+
+def ao_sair_hora(widget, event=None):
+    valor = widget.get().strip()
+    # Tenta formatar se for só números
+    numeros = ''.join(c for c in valor if c.isdigit())
+    if len(numeros) == 12:  # ddmmYYYYhhmm
+        novo = f"{numeros[:2]}/{numeros[2:4]}/{numeros[4:8]} {numeros[8:10]}:{numeros[10:12]}"
+        widget.delete(0, 'end')
+        widget.insert(0, novo)
+    elif len(numeros) == 4:  # hhmm
+        novo = f"{numeros[:2]}:{numeros[2:4]}"
+        widget.delete(0, 'end')
+        widget.insert(0, novo)
+    # Se não for válido, não faz nada (ou pode colorir de vermelho)

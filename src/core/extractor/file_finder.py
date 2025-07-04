@@ -54,7 +54,7 @@ def construir_caminho_pdf(data, maquina):
         nome_mes = nomes_meses.get(mes, "").lower()
 
         # Find closest matching month
-        mes_correspondente = difflib.get_close_matches(nome_mes, meses, n=1, cutoff=0.6)
+        mes_correspondente = [m for m in meses if m.lower() == nome_mes]
         if not mes_correspondente:
             raise FileNotFoundError(f"Mês '{nome_mes}' não encontrado em {base_dir}")
         mes_folder = mes_correspondente[0]
@@ -66,17 +66,15 @@ def construir_caminho_pdf(data, maquina):
 
         # Search PDF with similar name to machine
         arquivos_pdf = [arq for arq in os.listdir(pasta_dia) if arq.endswith(".pdf")]
-        maquina_arquivo = difflib.get_close_matches(maquina.lower() + ".pdf", [a.lower() for a in arquivos_pdf], n=1, cutoff=0.6)
-
-        if not maquina_arquivo:
-            raise FileNotFoundError(f"Arquivo correspondente à máquina '{maquina}' não encontrado em {pasta_dia}")
-
-        # Find original file with correct capitalization
+        nome_pdf = maquina.lower().replace(' ', '') + ".pdf"
         arquivo_original = None
         for arq in arquivos_pdf:
-            if arq.lower() == maquina_arquivo[0]:
+            if arq.lower().replace(' ', '') == nome_pdf:
                 arquivo_original = arq
                 break
+
+        if not arquivo_original:
+            raise FileNotFoundError(f"Arquivo correspondente à máquina '{maquina}' não encontrado em {pasta_dia}")
 
         return os.path.join(pasta_dia, arquivo_original)
 

@@ -18,7 +18,8 @@ def gerar_headers_colunas():
         'Quantidade',
         'Status',
         'Grupo',
-        'Observações'
+        'Observações',
+        'Média Produção'
     ]
 
 def criar_headers_alfabeticos(num_colunas=26):

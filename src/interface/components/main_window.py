@@ -28,9 +28,6 @@ class MainWindow:
         self.setup_window()
         self.create_layout()
         self.initialize_components()
-        # Remover text_resultado duplicado
-        # self.text_resultado = tk.Text(self.window, height=5, bg='#f5f5f5', font=('Consolas', 10))
-        # self.text_resultado.grid(row=5, column=0, columnspan=8, sticky="ew", padx=10, pady=5)
         # Adiciona referências dos campos de entrada ao objeto global
         if hasattr(self.toolbar, 'entrada_data'):
             globals.entrada_data = self.toolbar.entrada_data
@@ -44,6 +41,7 @@ class MainWindow:
             globals.entrada_intervalo = self.toolbar.entrada_intervalo
         self.create_action_buttons()
         register_events(self)
+        globals.main_window_instance = self
     
     def setup_window(self):
         """Setup main window properties"""
@@ -60,6 +58,18 @@ class MainWindow:
         # Create main frame
         self.frame_principal = tk.Frame(self.window, bg='#f5f5f5', relief='raised', bd=1)
         self.frame_principal.grid(row=0, column=0, columnspan=8, sticky="ew", padx=10, pady=5)
+        
+        # Campo de Média Geral acima da tabela
+        self.frame_media_geral = tk.Frame(self.window, bg='#f5f5f5')
+        self.frame_media_geral.grid(row=1, column=0, columnspan=8, sticky="ew", padx=10, pady=2)
+        tk.Label(self.frame_media_geral, text="Média Geral:", bg='#f5f5f5', font=('Arial', 10, 'bold')).pack(side="left", padx=(10,2))
+        self.entrada_media_geral = tk.Entry(self.frame_media_geral, width=15, font=('Arial', 10))
+        self.entrada_media_geral.pack(side="left")
+        # Botão aplicar média geral
+        btn_aplicar_media = tk.Button(self.frame_media_geral, text="Aplicar Média Geral", command=self.aplicar_media_geral, bg='#2196F3', fg='white', font=('Arial', 9, 'bold'))
+        btn_aplicar_media.pack(side="left", padx=5)
+        # Armazena referência global
+        globals.entrada_media_geral = self.entrada_media_geral
         
         # Create toolbar with input fields
         self.toolbar = create_toolbar(self.frame_principal)
@@ -93,11 +103,7 @@ class MainWindow:
             self.terminal.insert(tk.END, "🖱️ Clique com botão direito para mais opções de edição.\n\n")
         
         self.table.bind("<Double-1>", lambda event: editar_celula(event, globals.tabela))
-        # Remover chamada para self.add_edit_buttons() para evitar botões duplicados
 
-    def add_edit_buttons(self):
-        pass  # Remove implementação para evitar botões duplicados
-    
     def calcular_desempenho_wrapper(self):
         from src.core.metrics.calculator import calcular_desempenho
         from src.core.config.setup_config import TEMPOS_SETUP
@@ -189,6 +195,34 @@ class MainWindow:
             messagebox.showinfo("Sucesso", f"Análise exportada para {arquivo}")
         except Exception as e:
             messagebox.showerror("Erro", f"Erro ao exportar análise: {str(e)}")
+    
+    def aplicar_media_geral(self):
+        """Atualiza apenas as linhas de produção na coluna 'Média Produção' com o valor digitado na média geral."""
+        valor = self.entrada_media_geral.get().strip()
+        if not valor:
+            return
+        # Garante o sufixo 'p/h'
+        if 'p/h' not in valor:
+            valor = valor + ' p/h'
+        # Atualiza DataFrame global
+        import pandas as pd
+        if hasattr(globals, 'df_global') and isinstance(globals.df_global, pd.DataFrame):
+            if 'Média Produção' in globals.df_global.columns and 'Evento' in globals.df_global.columns:
+                mask = globals.df_global['Evento'].str.lower().str.contains('produção')
+                globals.df_global.loc[mask, 'Média Produção'] = valor
+        # Atualiza visual da tabela
+        tabela = globals.tabela
+        if tabela is not None:
+            colunas = tabela['columns']
+            if 'Média Produção' in colunas and 'Evento' in colunas:
+                idx_media = colunas.index('Média Produção')
+                idx_evento = colunas.index('Evento')
+                for item in tabela.get_children():
+                    valores = list(tabela.item(item)['values'])
+                    evento = str(valores[idx_evento]).lower()
+                    if 'produção' in evento:
+                        valores[idx_media] = valor
+                        tabela.item(item, values=valores)
     
     def run(self):
         """Start the application"""

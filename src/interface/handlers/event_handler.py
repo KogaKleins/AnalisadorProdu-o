@@ -12,7 +12,7 @@ from .group_handler import (
 from src.interface import globals
 
 def importar_e_chamar_calcular_desempenho():
-    from data.performance_calculator import calcular_desempenho
+    from src.core.metrics.calculator import calcular_desempenho
     return calcular_desempenho()
 
 def handle_event(event_type, **kwargs):

@@ -42,18 +42,20 @@ class ReportGenerator:
         report += period.generate_period_section(hora_inicio, hora_fim, intervalo, tempo_disponivel)
         
         # Calculate general metrics
-        metrics = efficiency.calculate_general_metrics(grupos_para_analise, ops_analise, tempo_disponivel)
+        metrics = efficiency.calculate_general_metrics(grupos_para_analise, ops_analise, tempo_disponivel, data.get('df'))
         
         # Summary section
         report += summary.generate_general_summary(metrics, tempo_disponivel)
         
         # General averages section
         if ops_analise:
-            report += efficiency.generate_simplified_general_averages(ops_analise)
+            report += efficiency.generate_detailed_general_averages(ops_analise)
         
         # OPs analysis section
         if ops_analise:
-            report += ops.generate_ops_section(ops_analise, grupos_para_analise)
+            df = data.get('df')
+            # Sempre mostrar todas as OPs, mesmo com agrupamento
+            report += ops.generate_ops_section(ops_analise, grupos_para_analise, df)
         
         return report
     

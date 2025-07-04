@@ -5,6 +5,7 @@ Performance analysis and calculation module.
 import tkinter as tk
 from ..config.setup_config import TEMPOS_SETUP
 import importlib
+from src.interface.handlers.data_handler import MACHINE_ALIASES
 
 MACHINES_MAP = {
     'komori': 'komori',
@@ -31,6 +32,8 @@ def calcular_desempenho(df_global, text_resultado, config):
     Returns:
         None: Results are displayed in text_resultado widget
     """
+    import importlib
+    import sys
     if df_global is None or df_global.empty:
         text_resultado.delete("1.0", tk.END)
         text_resultado.insert(tk.END, "❌ ERRO: Nenhum dado carregado para calcular o desempenho.")
@@ -38,35 +41,26 @@ def calcular_desempenho(df_global, text_resultado, config):
 
     try:
         maquina = config.get('maquina', '').strip().lower()
+        maquina_padrao = MACHINE_ALIASES.get(maquina, maquina)
         modulo = None
         for key, modname in MACHINES_MAP.items():
-            if key in maquina:
+            if key == maquina_padrao:
                 modulo = modname
                 break
         if modulo:
-            mod = importlib.import_module(f"src.core.metrics.maquinas.{modulo}")
+            try:
+                mod = importlib.import_module(f"src.core.metrics.maquinas.{modulo}")
+            except ModuleNotFoundError:
+                maquinas_disp = ', '.join(sorted(set(MACHINES_MAP.keys())))
+                text_resultado.delete("1.0", tk.END)
+                text_resultado.insert(tk.END, f"❌ ERRO: Máquina '{maquina}' não encontrada ou não implementada.\nMáquinas disponíveis: {maquinas_disp}")
+                return
             resultado = mod.calcular_desempenho(df_global, config)
         else:
-            # Lógica padrão
-            hora_inicio = config.get('hora_inicio')
-            hora_fim = config.get('hora_fim')
-            intervalo_str = config.get('intervalo', '60')
-
-            if not hora_inicio or not hora_fim:
-                text_resultado.delete("1.0", tk.END)
-                text_resultado.insert(tk.END, "❌ ERRO: Preencha os horários de início e fim.")
-                return
-
-            intervalo = int(intervalo_str) if intervalo_str else 60
-
-            # Calculate metrics
-            from data.metrics.agrupamento import agrupar_dados
-            from data.metrics.relatorio import gerar_relatorio
-
-            df = df_global.copy()
-            grupos_para_analise, ops_analise = agrupar_dados(df, config.get('linhas_agrupadas', {}))
-            resultado = gerar_relatorio(grupos_para_analise, ops_analise, hora_inicio, hora_fim, intervalo)
-
+            maquinas_disp = ', '.join(sorted(set(MACHINES_MAP.keys())))
+            text_resultado.delete("1.0", tk.END)
+            text_resultado.insert(tk.END, f"❌ ERRO: Máquina '{maquina}' não encontrada ou não implementada.\nMáquinas disponíveis: {maquinas_disp}")
+            return
         # Exibe resultado
         text_resultado.delete("1.0", tk.END)
         text_resultado.insert(tk.END, resultado)

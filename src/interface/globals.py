@@ -11,3 +11,5 @@ label_selecao = None
 linhas_selecionadas = []
 entrada_data = None
 entrada_maquina = None
+entrada_media_geral = None
+main_window_instance = None

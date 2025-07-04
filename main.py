@@ -50,5 +50,8 @@ def main():
         logger.error(f"Erro ao iniciar aplicação: {str(e)}", exc_info=True)
         sys.exit(1)
 
+# Redireciona para o ponto de entrada principal
 if __name__ == "__main__":
-    main()
+    script_path = os.path.join(os.path.dirname(__file__), 'src', 'main.py')
+    result = subprocess.run([sys.executable, script_path])
+    sys.exit(result.returncode)
