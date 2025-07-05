@@ -15,7 +15,7 @@ from ..components.toolbar import create_toolbar
 from ..components.table import create_table_view
 from ..components.terminal import create_terminal_panel
 from ..handlers.event_handler import register_events
-from ..handlers.table_handler import editar_celula, inserir_linha, deletar_linha, aplicar_cores_grupos, editar_celula, configurar_colunas_da_tabela
+from ..handlers.table_handler import editar_celula, inserir_linha, deletar_linha, aplicar_cores_grupos, editar_celula, configurar_colunas_da_tabela, atualizar_dataframe_global
 
 class MainWindow:
     def __init__(self):
@@ -105,6 +105,8 @@ class MainWindow:
         self.table.bind("<Double-1>", lambda event: editar_celula(event, globals.tabela))
 
     def calcular_desempenho_wrapper(self):
+        from src.interface.handlers.table_handler import atualizar_dataframe_global
+        atualizar_dataframe_global()
         from src.core.metrics.calculator import calcular_desempenho
         from src.core.config.setup_config import TEMPOS_SETUP
         config = TEMPOS_SETUP.copy()

@@ -29,6 +29,12 @@ MACHINE_ALIASES = {
     'furnax': 'furnax',
     'cv': 'cv manual',
     'cv manual': 'cv manual',
+    'cv guangya': 'cv_guangya',
+    'guangya': 'cv_guangya',
+    'guan': 'cv_guangya',
+    'cvgy': 'cv_guangya',
+    'cv guan': 'cv_guangya',
+    'gy': 'cv_guangya',
     'h': 'hcd',
     'hcd': 'hcd',
     's': 'samkoon',
@@ -40,6 +46,20 @@ MACHINE_ALIASES = {
     'sbl': 'sbl',
     'sbl': 'sbl',
 }
+
+def get_maquina_alias(valor):
+    valor = str(valor).strip().lower()
+    if valor in MACHINE_ALIASES:
+        return MACHINE_ALIASES[valor]
+    # Matching por prefixo
+    for alias in MACHINE_ALIASES:
+        if alias.startswith(valor):
+            return MACHINE_ALIASES[alias]
+    # Matching por substring (fuzzy leve)
+    for alias in MACHINE_ALIASES:
+        if valor in alias:
+            return MACHINE_ALIASES[alias]
+    return valor
 
 def carregar_dados_wrapper():
     """Wrapper para carregar dados a partir dos campos da interface"""
@@ -54,7 +74,7 @@ def carregar_dados(data, maquina):
         return
 
     try:
-        caminho_pdf = construir_caminho_pdf(data, maquina)
+        caminho_pdf = construir_caminho_pdf(data, get_maquina_alias(maquina))
         if not os.path.isfile(caminho_pdf):
             messagebox.showerror("Erro", f"PDF da máquina '{maquina}' não encontrado!\nCaminho: {caminho_pdf}")
             # Limpa dados globais e tabela
@@ -107,13 +127,32 @@ def process_dataframe(df):
 
     df = calculate_setup_times(df)
 
-    # Se for Furnax, preenche os campos especiais após o cálculo genérico
+    # Preenche campos especiais para todas as máquinas
     if valor_maquina == 'furnax':
         from src.core.metrics.maquinas.furnax import preencher_campos_furnax
         df = preencher_campos_furnax(df)
     elif valor_maquina == 'sbl':
         from src.core.metrics.maquinas.sbl import preencher_campos_sbl
         df = preencher_campos_sbl(df)
+    elif valor_maquina == 'komori':
+        from src.core.metrics.maquinas.komori import preencher_campos_komori
+        df = preencher_campos_komori(df)
+    elif valor_maquina == 'bobst':
+        from src.core.metrics.maquinas.bobst import preencher_campos_bobst
+        df = preencher_campos_bobst(df)
+    elif valor_maquina == 'hcd':
+        from src.core.metrics.maquinas.hcd import preencher_campos_hcd
+        df = preencher_campos_hcd(df)
+    elif valor_maquina == 'cv manual':
+        from src.core.metrics.maquinas.cv_manual import preencher_campos_cv_manual
+        df = preencher_campos_cv_manual(df)
+    elif valor_maquina == 'cv_guangya':
+        from src.core.metrics.maquinas.cv_guangya import preencher_campos_cv_guangya
+        df = preencher_campos_cv_guangya(df)
+    elif valor_maquina == 'samkoon':
+        from src.core.metrics.maquinas.samkoon import preencher_campos_samkoon
+        df = preencher_campos_samkoon(df)
+    # Adicione outras máquinas conforme necessário
 
     # Limpa tempo de setup de OPs sem acerto (universal para todas as máquinas)
     df = limpar_setup_op_sem_acerto(df)
@@ -154,12 +193,12 @@ def get_valor_maquina():
             valor = get_method()
             if valor is not None:
                 valor = str(valor).strip().lower()
-                return MACHINE_ALIASES.get(valor, valor)
+                return get_maquina_alias(valor)
             else:
                 return ''
         except Exception:
             return ''
     elif em:
         valor = str(em).strip().lower() if hasattr(em, 'strip') else str(em).lower()
-        return MACHINE_ALIASES.get(valor, valor)
+        return get_maquina_alias(valor)
     return ''

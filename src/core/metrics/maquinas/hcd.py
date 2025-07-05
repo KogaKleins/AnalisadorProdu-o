@@ -2,6 +2,7 @@
 Lógica de análise e setup para máquina HCD
 """
 import re
+from src.core.metrics.utils import preencher_campos_generico
 
 def calcular_desempenho(df_global, config):
     """
@@ -62,18 +63,11 @@ def extrair_media_producao(linha):
     return media
 
 def preencher_campos_hcd(df):
-    for idx, row in df.iterrows():
-        processo = str(row.get('Processo', '')).lower()
-        evento = str(row.get('Evento', '')).lower()
-        # Tempo Setup
-        setup_atual = str(row.get('Tempo Setup', '')).strip()
-        if 'acerto' in evento and not setup_atual:
-            if 'nova' in processo:
-                df.at[idx, 'Tempo Setup'] = '01:30'
-            else:
-                df.at[idx, 'Tempo Setup'] = '01:00'
-        # Média Produção
-        media_atual = str(row.get('Média Produção', '')).strip()
-        if not media_atual:
-            df.at[idx, 'Média Produção'] = '5000 p/h'
-    return df
+    regras_setup = [
+        (lambda proc, evt: 'nova' in proc, '01:30'),
+        (lambda proc, evt: True, '01:00'),
+    ]
+    regras_media = [
+        (lambda proc, evt: 'produção' in evt, '5000 p/h'),
+    ]
+    return preencher_campos_generico(df, regras_setup, regras_media)

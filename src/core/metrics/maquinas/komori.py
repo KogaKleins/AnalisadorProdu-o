@@ -2,8 +2,19 @@
 Lógica de análise e setup para máquina Komori
 """
 import re
+from src.core.metrics.utils import preencher_campos_generico
 
 print('[KOMORI MODULE] komori.py foi importado')
+
+def preencher_campos_komori(df):
+    regras_setup = [
+        (lambda proc, evt: '45 min' in proc, '00:45'),
+        (lambda proc, evt: True, '00:45'),  # padrão
+    ]
+    regras_media = [
+        (lambda proc, evt: 'produção' in evt, '6000 p/h'),
+    ]
+    return preencher_campos_generico(df, regras_setup, regras_media)
 
 def calcular_desempenho(df_global, config):
     """
@@ -18,6 +29,7 @@ def calcular_desempenho(df_global, config):
     from src.core.data.data_processor import processar_grupos
     from src.core.metrics.report.generator import ReportGenerator
     df = df_global.copy()
+    df = preencher_campos_komori(df)
     grupos_para_analise, ops_analise = processar_grupos(df, config.get('linhas_agrupadas', {}))
     generator = ReportGenerator()
     resultado = generator.generate_report({'grupos': grupos_para_analise, 'ops': ops_analise, 'df': df}, {

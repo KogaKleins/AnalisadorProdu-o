@@ -18,6 +18,7 @@ MACHINES_MAP = {
     'laminadora': 'laminadora',
     'verniz.uv sakurai': 'verniz_uv_sakurai',
     'bobst': 'bobst',
+    'cv_guangya': 'cv_guangya',
 }
 
 def calcular_desempenho(df_global, text_resultado, config):

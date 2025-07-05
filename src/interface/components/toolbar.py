@@ -5,7 +5,7 @@ Contains the toolbar with input fields and buttons.
 
 import tkinter as tk
 from tkinter import ttk
-from ..handlers.data_handler import carregar_dados_wrapper
+from ..handlers.data_handler import carregar_dados_wrapper, MACHINE_ALIASES
 from ..handlers.formatters import (
     ao_digitar_data,
     ao_digitar_hora_inicio,
@@ -92,31 +92,18 @@ class ToolbarComponent:
     def update_machine_placeholder(self, event=None):
         if not self.entrada_maquina or not self.machine_placeholder:
             return
-        aliases = {
-            'b': 'Bobst',
-            'bobst': 'Bobst',
-            'k': 'Komori',
-            'komori': 'Komori',
-            'f': 'Furnax',
-            'furnax': 'Furnax',
-            'cv': 'CV Manual',
-            'cv manual': 'CV Manual',
-            'h': 'HCD',
-            'hcd': 'HCD',
-            's': 'Samkoon',
-            'samkoon': 'Samkoon',
-            'l': 'Laminadora',
-            'laminadora': 'Laminadora',
-            'v': 'Verniz UV Sakurai',
-            'verniz.uv sakurai': 'Verniz UV Sakurai',
-            'sbl': 'SBL',
-        }
+        # Novo autocomplete inteligente: usa todos os aliases
         valor = self.entrada_maquina.get().strip()
         valor_lower = valor.lower()
         sugestao = ""
-        for alias, nome in aliases.items():
-            if nome.lower().startswith(valor_lower) and valor:
-                sugestao = nome
+        # Busca por prefixo em qualquer alias
+        for alias, nome_interno in MACHINE_ALIASES.items():
+            nome_exibicao = nome_interno.replace('_', ' ').title() if 'cv' in nome_interno else nome_interno.title()
+            if alias.startswith(valor_lower) and valor:
+                sugestao = nome_exibicao
+                break
+            if nome_exibicao.lower().startswith(valor_lower) and valor:
+                sugestao = nome_exibicao
                 break
         if sugestao and valor and sugestao.lower() != valor_lower:
             complemento = sugestao[len(valor):]
@@ -135,31 +122,16 @@ class ToolbarComponent:
     def autocomplete_machine(self, event=None):
         if not self.entrada_maquina:
             return
-        aliases = {
-            'b': 'Bobst',
-            'bobst': 'Bobst',
-            'k': 'Komori',
-            'komori': 'Komori',
-            'f': 'Furnax',
-            'furnax': 'Furnax',
-            'cv': 'CV Manual',
-            'cv manual': 'CV Manual',
-            'h': 'HCD',
-            'hcd': 'HCD',
-            's': 'Samkoon',
-            'samkoon': 'Samkoon',
-            'l': 'Laminadora',
-            'laminadora': 'Laminadora',
-            'v': 'Verniz UV Sakurai',
-            'verniz.uv sakurai': 'Verniz UV Sakurai',
-            'sbl': 'SBL',
-        }
         valor = self.entrada_maquina.get().strip()
         valor_lower = valor.lower()
         sugestao = ""
-        for alias, nome in aliases.items():
-            if nome.lower().startswith(valor_lower) and valor:
-                sugestao = nome
+        for alias, nome_interno in MACHINE_ALIASES.items():
+            nome_exibicao = nome_interno.replace('_', ' ').title() if 'cv' in nome_interno else nome_interno.title()
+            if alias.startswith(valor_lower) and valor:
+                sugestao = nome_exibicao
+                break
+            if nome_exibicao.lower().startswith(valor_lower) and valor:
+                sugestao = nome_exibicao
                 break
         if sugestao and valor and sugestao.lower() != valor_lower:
             self.entrada_maquina.delete(0, tk.END)

@@ -1,9 +1,6 @@
-"""
-Lógica de análise e setup para máquina C/V Manual
-"""
 from src.core.metrics.utils import preencher_campos_generico
 
-def preencher_campos_cv_manual(df):
+def preencher_campos_cv_guangya(df):
     regras_setup = [
         (lambda proc, evt: 'hot stamping' in proc, '02:00'),
         (lambda proc, evt: 'faca nova' in proc, '01:30'),
@@ -25,7 +22,7 @@ def calcular_desempenho(df_global, config):
     from src.core.data.data_processor import processar_grupos
     from src.core.metrics.report.generator import ReportGenerator
     df = df_global.copy()
-    df = preencher_campos_cv_manual(df)
+    df = preencher_campos_cv_guangya(df)
     grupos_para_analise, ops_analise = processar_grupos(df, config.get('linhas_agrupadas', {}))
     generator = ReportGenerator()
     resultado = generator.generate_report({'grupos': grupos_para_analise, 'ops': ops_analise, 'df': df}, {
@@ -33,4 +30,4 @@ def calcular_desempenho(df_global, config):
         'hora_fim': hora_fim,
         'intervalo': intervalo
     })
-    return resultado
+    return resultado 

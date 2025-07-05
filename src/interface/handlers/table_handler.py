@@ -10,6 +10,7 @@ from ..utils.header_generator import gerar_headers_colunas
 from src.interface import globals
 import unidecode
 import re
+from src.core.metrics.utils import formatar_quantidade, parse_quantidade, formatar_tempo, parse_tempo
 
 def configurar_tabela(treeview, colunas):
     """Configure table columns and headers"""
@@ -146,6 +147,9 @@ def formatar_tempo(valor):
             try:
                 h = int(h)
                 m = int(m)
+                # Ajusta minutos para nunca passar de 59
+                h += m // 60
+                m = m % 60
                 return f"{h:02d}:{m:02d}"
             except Exception:
                 return valor
@@ -155,21 +159,18 @@ def formatar_tempo(valor):
     if len(valor_num) <= 2:
         return f"00:{int(valor_num):02d}"
     if len(valor_num) == 3:
-        return f"0{valor_num[0]}:{valor_num[1:]}"
+        h = int(valor_num[0])
+        m = int(valor_num[1:])
+        h += m // 60
+        m = m % 60
+        return f"0{h}:{m:02d}"
     if len(valor_num) >= 4:
-        return f"{int(valor_num[:-2]):02d}:{int(valor_num[-2:]):02d}"
+        h = int(valor_num[:-2])
+        m = int(valor_num[-2:])
+        h += m // 60
+        m = m % 60
+        return f"{h:02d}:{m:02d}"
     return valor
-
-def formatar_quantidade(valor):
-    # Formata número para string com separador de milhar
-    try:
-        num = float(str(valor).replace('.', '').replace(',', '.'))
-        if num.is_integer():
-            return f"{int(num):,}".replace(",", ".")
-        else:
-            return f"{num:,.2f}".replace(",", ".")
-    except Exception:
-        return valor
 
 def formatar_tempo_para_minutos(valor):
     # Converte HH:MM ou formatos burros para minutos inteiros
@@ -222,12 +223,52 @@ def editar_celula(event, treeview):
         entry.select_range(0, tk.END)
         def salvar_edicao(event=None):
             novo_valor = entry.get()
-            colunas = list(treeview['columns'])
+            colunas = list(map(str, treeview['columns']))
             col_nome = colunas[column_index] if column_index < len(colunas) else ''
             col_norm = unidecode.unidecode(col_nome).lower()
             # Se for coluna de tempo, normaliza e atualiza campo auxiliar em minutos
             if 'tempo' in col_norm:
-                novo_valor = formatar_tempo(novo_valor)
+                # Normaliza entradas de tempo para HH:MM
+                temp = novo_valor.strip()
+                temp_num = re.sub(r'\D', '', temp)
+                
+                if len(temp_num) == 3:
+                    # 3 dígitos: interpretar como HMM (ex: 200 = 2:00, 180 = 1:80 -> 2:20)
+                    h = int(temp_num[0])
+                    m = int(temp_num[1:])
+                    # Ajusta se minutos > 59
+                    h += m // 60
+                    m = m % 60
+                    temp = f"0{h}:{m:02d}"
+                elif len(temp_num) == 4:
+                    # 4 dígitos: interpretar como HHMM (ex: 0200 = 02:00, 1430 = 14:30)
+                    h = int(temp_num[:2])
+                    m = int(temp_num[2:])
+                    # Ajusta se minutos > 59
+                    h += m // 60
+                    m = m % 60
+                    temp = f"{h:02d}:{m:02d}"
+                elif len(temp_num) <= 2 and temp_num:
+                    # 1 ou 2 dígitos: interpretar como minutos (ex: 40 = 00:40, 80 = 01:20)
+                    minutos = int(temp_num)
+                    h = minutos // 60
+                    m = minutos % 60
+                    temp = f"{h:02d}:{m:02d}"
+                elif ':' in temp:
+                    # Já está no formato HH:MM, apenas valida
+                    partes = temp.split(':')
+                    if len(partes) == 2:
+                        try:
+                            h = int(partes[0])
+                            m = int(partes[1])
+                            # Ajusta se minutos > 59
+                            h += m // 60
+                            m = m % 60
+                            temp = f"{h:02d}:{m:02d}"
+                        except:
+                            pass
+                
+                novo_valor = temp
                 # Atualiza campo auxiliar 'Tempo (min)' se existir
                 try:
                     tempo_min = formatar_tempo_para_minutos(novo_valor)
@@ -248,8 +289,30 @@ def editar_celula(event, treeview):
             # Só salva se mudou
             if str(novo_valor) != str(valor_atual):
                 valores = list(treeview.item(item)['values'])
+                colunas = list(map(str, treeview['columns']))
                 if column_index >= 0 and column_index < len(valores):
-                    valores[column_index] = novo_valor
+                    # Quantidade: salva como número no DataFrame, exibe formatado na tabela
+                    if 'qtd' in col_norm:
+                        try:
+                            num_val = parse_quantidade(novo_valor)
+                            valores[column_index] = formatar_quantidade(num_val)
+                            if globals.df_global is not None:
+                                globals.df_global.at[treeview.index(item), colunas[column_index]] = num_val
+                        except Exception:
+                            valores[column_index] = novo_valor
+                    # Tempo: salva como minutos no DataFrame, exibe HH:MM na tabela
+                    elif 'tempo' in col_norm:
+                        try:
+                            minutos = parse_tempo(novo_valor)
+                            valores[column_index] = formatar_tempo(minutos)
+                            if globals.df_global is not None:
+                                globals.df_global.at[treeview.index(item), colunas[column_index]] = minutos
+                        except Exception:
+                            valores[column_index] = novo_valor
+                    else:
+                        valores[column_index] = novo_valor
+                        if globals.df_global is not None:
+                            globals.df_global.at[treeview.index(item), colunas[column_index]] = novo_valor
                     treeview.item(item, values=valores)
                 atualizar_dataframe_global()
             entry.destroy()
@@ -275,7 +338,7 @@ def inserir_linha(tabela):
         idx = tabela.index(selecionadas[0])
     else:
         idx = 0
-    colunas = tabela['columns']
+    colunas = list(map(str, tabela['columns']))
     nova_linha = ['' for _ in colunas]
     tabela.insert('', idx, values=nova_linha)
     df = globals.df_global.copy() if globals.df_global is not None else pd.DataFrame(columns=colunas)
@@ -309,13 +372,12 @@ def atualizar_dataframe_global():
     """
     Sincroniza o DataFrame global com os dados atuais da tabela.
     Converte e valida valores numéricos nas colunas de quantidade e tempo.
-    Após atualizar, chama a análise de desempenho automaticamente.
     """
     tabela = globals.tabela
     if tabela is None or not tabela.winfo_exists():
         return
     try:
-        raw_cols = list(tabela['columns'])
+        raw_cols = list(map(str, tabela['columns']))
         colunas = [str(c) for c in raw_cols if isinstance(c, str) or isinstance(c, int)]
     except Exception:
         colunas = []
@@ -324,11 +386,10 @@ def atualizar_dataframe_global():
         valores = list(tabela.item(item)['values'])
         for i, col in enumerate(colunas):
             col_norm = unidecode.unidecode(col).lower()
-            if 'qtd' in col_norm or 'tempo' in col_norm:
-                val = str(valores[i]).replace('.', '').replace(',', '.')
-                # Se for tempo, manter string para análise (ex: 01:00)
-                if 'tempo' in col_norm and ':' in val:
-                    valores[i] = val if val else '00:00'
+            if 'qtd' in col_norm:
+                valores[i] = parse_quantidade(valores[i])
+            elif 'tempo' in col_norm:
+                valores[i] = parse_tempo(valores[i])
         if len(valores) == len(colunas):
             dados.append(valores)
     # Garante que a coluna 'Tempo (min)' existe
@@ -347,7 +408,7 @@ def atualizar_dataframe_global():
     if idx_tempo is not None and idx_tempo_min is not None:
         for row in dados:
             tempo_str = row[idx_tempo] if idx_tempo < len(row) else ''
-            row[idx_tempo_min] = formatar_tempo_para_minutos(tempo_str)
+            row[idx_tempo_min] = parse_tempo(tempo_str)
     # Adiciona linha de totais ao final (somente para linhas de produção/OPs válidas)
     if dados and colunas:
         totais = ['' for _ in colunas]
@@ -367,8 +428,8 @@ def atualizar_dataframe_global():
                     linhas_validas.append(row)
         for i in idxs_qtd:
             try:
-                totais[i] = sum(float(row[i]) for row in linhas_validas if isinstance(row[i], (int, float, float)))
-                totais[i] = formatar_quantidade(totais[i])
+                total_num = sum(row[i] for row in linhas_validas if isinstance(row[i], (int, float)))
+                totais[i] = formatar_quantidade(total_num)
             except Exception:
                 totais[i] = ''
         if len(totais) > 0:
@@ -376,31 +437,22 @@ def atualizar_dataframe_global():
         if dados and str(dados[-1][0]).strip().upper() == 'TOTAL':
             dados = dados[:-1]
         dados.append(totais)
+    # Padroniza colunas para lista de strings simples
+    if hasattr(colunas, 'get'):
+        colunas = list(colunas.get())
+    else:
+        colunas = list(colunas)
+    colunas = [str(c) for c in colunas]
     if dados and isinstance(colunas, list) and all(isinstance(c, str) for c in colunas):
         import pandas as pd
         try:
-            # Para o DataFrame, armazene as quantidades como número, não string formatada
-            for row in dados:
-                for i, col in enumerate(colunas):
-                    col_norm = unidecode.unidecode(col).lower()
-                    if 'qtd' in col_norm and isinstance(row[i], str):
-                        try:
-                            row[i] = float(row[i].replace('.', '').replace(',', '.'))
-                        except Exception:
-                            pass
             df = pd.DataFrame(data=dados, columns=colunas)
-            globals.df_global = df
+            if not df.empty:
+                globals.df_global = df
         except Exception:
             df = pd.DataFrame(data=dados)
-            globals.df_global = df
-        try:
-            from src.interface.components.main_window import MainWindow
-            if hasattr(globals, 'main_window_instance') and globals.main_window_instance:
-                globals.main_window_instance.calcular_desempenho_wrapper()
-        except Exception:
-            pass
-    if tabela is not None and hasattr(tabela, 'get_children'):
-        aplicar_cores_por_processo(tabela)
+            if not df.empty:
+                globals.df_global = df
 
 def importar_dados():
     pass
@@ -449,7 +501,7 @@ def aplicar_cores_por_processo(tabela):
     op_anterior = None
     bloco_idx = 0
     # Identifica índices das colunas OP/OS e Processo
-    colunas = list(tabela['columns'])
+    colunas = list(map(str, tabela['columns']))
     idx_op = None
     idx_proc = None
     for i, c in enumerate(colunas):

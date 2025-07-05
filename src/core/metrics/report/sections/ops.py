@@ -10,6 +10,7 @@ from .efficiency import (
     consolidar_dados_op
 )
 import unidecode
+from src.core.metrics.utils import formatar_quantidade
 
 def generate_ops_section(ops_analise, grupos_para_analise, df):
     """Generate OPs analysis section with corrected formulas and per-entry analysis"""
@@ -198,7 +199,7 @@ def generate_ops_section(ops_analise, grupos_para_analise, df):
                 section += f"Atraso de Setup: {abs(dados_op['ganho_setup'])} min (NÃO VÁLIDO - sem produção, conta como 100% até o programado)\n"
             else:
                 section += f"Setup aparentemente ganho: 0 min (NÃO VÁLIDO - sem produção, conta como 100%)\n"
-        section += f"Qtd Produzida: {dados_op['qtd_produzida']:,}\n"
+        section += f"Qtd Produzida: {formatar_quantidade(dados_op['qtd_produzida'])}\n"
         # Velocidade real
         if dados_op['velocidade_real'] > 0:
             section += f"Velocidade Real: {dados_op['velocidade_real']:.0f} p/h\n"
@@ -288,7 +289,7 @@ def generate_setup_analysis(dados_op, tempo_setup_programado):
 def generate_production_info(dados_op):
     """Generate production information"""
     info = "\n🏭 ANÁLISE DE PRODUÇÃO\n"
-    info += f"Quantidade Produzida: {dados_op['qtd_produzida']:,.0f} un\n"
+    info += f"Quantidade Produzida: {formatar_quantidade(dados_op['qtd_produzida'])} un\n"
     info += f"Tempo Total de Produção: {dados_op['tempo_total_producao']:.0f} min\n"
     
     if dados_op['velocidade_nominal'] > 0 and dados_op['qtd_produzida'] > 0:
@@ -317,7 +318,7 @@ def generate_groups_summary(grupos_op):
     for nome_grupo, dados in grupos_op:
         summary += f"\n▫️ {nome_grupo}\n"
         if dados['tem_producao']:
-            summary += f"  Produção: {dados['qtd_produzida']:,.0f} un em {dados['tempo_total_producao']:.0f} min\n"
+            summary += f"  Produção: {formatar_quantidade(dados['qtd_produzida'])} un em {dados['tempo_total_producao']:.0f} min\n"
         if dados['tem_acerto']:
             summary += f"  Setup: {dados['tempo_setup']:.0f} min\n"
     

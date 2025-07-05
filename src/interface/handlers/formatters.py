@@ -89,4 +89,12 @@ def ao_sair_hora(widget, event=None):
         novo = f"{numeros[:2]}:{numeros[2:4]}"
         widget.delete(0, 'end')
         widget.insert(0, novo)
+    elif len(numeros) == 3:  # hhm
+        novo = f"0{numeros[0]}:{numeros[1:]}"
+        widget.delete(0, 'end')
+        widget.insert(0, novo)
+    elif len(numeros) == 2:  # mm
+        novo = f"00:{numeros}"
+        widget.delete(0, 'end')
+        widget.insert(0, novo)
     # Se não for válido, não faz nada (ou pode colorir de vermelho)

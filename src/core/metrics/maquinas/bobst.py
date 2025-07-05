@@ -2,6 +2,25 @@
 Lógica de análise e setup para máquina Bobst
 """
 
+from src.core.metrics.utils import preencher_campos_generico
+
+def _media_bobst(proc, evt):
+    if 'p/h' in proc:
+        return proc.split('p/h')[0].strip() + ' p/h'
+    return '4000 p/h'
+
+def preencher_campos_bobst(df):
+    regras_setup = [
+        (lambda proc, evt: 'colagem' in proc and 'bandeja' in proc, '02:10'),
+        (lambda proc, evt: 'colagem' in proc and 'lateral' in proc, '02:10'),
+        (lambda proc, evt: 'fundo automático' in proc, '02:10'),
+        (lambda proc, evt: True, '03:00'),
+    ]
+    regras_media = [
+        (lambda proc, evt: 'produção' in evt, '4000 p/h'),
+    ]
+    return preencher_campos_generico(df, regras_setup, regras_media)
+
 def calcular_desempenho(df_global, config):
     """
     Lógica de desempenho padrão para Bobst, usando o pipeline de análise geral.
@@ -15,6 +34,7 @@ def calcular_desempenho(df_global, config):
     from src.core.data.data_processor import processar_grupos
     from src.core.metrics.report.generator import ReportGenerator
     df = df_global.copy()
+    df = preencher_campos_bobst(df)
     grupos_para_analise, ops_analise = processar_grupos(df, config.get('linhas_agrupadas', {}))
     generator = ReportGenerator()
     resultado = generator.generate_report({'grupos': grupos_para_analise, 'ops': ops_analise, 'df': df}, {

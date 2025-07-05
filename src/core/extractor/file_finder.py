@@ -66,10 +66,10 @@ def construir_caminho_pdf(data, maquina):
 
         # Search PDF with similar name to machine
         arquivos_pdf = [arq for arq in os.listdir(pasta_dia) if arq.endswith(".pdf")]
-        nome_pdf = maquina.lower().replace(' ', '') + ".pdf"
+        nome_pdf = maquina.lower().replace(' ', '').replace('_', '') + ".pdf"
         arquivo_original = None
         for arq in arquivos_pdf:
-            if arq.lower().replace(' ', '') == nome_pdf:
+            if arq.lower().replace(' ', '').replace('_', '') == nome_pdf.replace('_', ''):
                 arquivo_original = arq
                 break
 

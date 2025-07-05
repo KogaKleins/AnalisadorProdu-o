@@ -2,32 +2,23 @@
 Lógica de análise e setup para máquina SBL (igual Furnax)
 """
 
+from src.core.metrics.utils import preencher_campos_generico
+
 def preencher_campos_sbl(df):
     """
     Preenche Tempo Setup e Média Produção conforme regras da SBL, mas só se o campo estiver vazio.
     """
-    for idx, row in df.iterrows():
-        processo = str(row.get('Processo', '')).lower()
-        evento = str(row.get('Evento', '')).lower()
-        # Tempo Setup
-        setup_atual = str(row.get('Tempo Setup', '')).strip()
-        if 'acerto' in evento and not setup_atual:
-            if 'destaque' in processo:
-                df.at[idx, 'Tempo Setup'] = '03:00'
-            elif 'relevo + corte' in processo or 'hot stamping' in processo:
-                df.at[idx, 'Tempo Setup'] = '02:00'
-            elif 'nova' in processo:
-                df.at[idx, 'Tempo Setup'] = '01:30'
-            else:
-                df.at[idx, 'Tempo Setup'] = '01:00'
-        # Média Produção
-        media_atual = str(row.get('Média Produção', '')).strip()
-        if not media_atual:
-            if 'micro ondulado' in processo:
-                df.at[idx, 'Média Produção'] = '2000 p/h'
-            else:
-                df.at[idx, 'Média Produção'] = '4000 p/h'
-    return df
+    regras_setup = [
+        (lambda proc, evt: 'destaque' in proc, '03:00'),
+        (lambda proc, evt: 'relevo + corte' in proc or 'hot stamping' in proc, '02:00'),
+        (lambda proc, evt: 'nova' in proc, '01:30'),
+        (lambda proc, evt: True, '01:00'),
+    ]
+    regras_media = [
+        (lambda proc, evt: 'produção' in evt and 'micro ondulado' in proc, '2000 p/h'),
+        (lambda proc, evt: 'produção' in evt, '4000 p/h'),
+    ]
+    return preencher_campos_generico(df, regras_setup, regras_media)
 
 def calcular_desempenho(df_global, config):
     """
