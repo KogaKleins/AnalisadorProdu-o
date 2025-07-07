@@ -17,7 +17,7 @@ from core.data.data_processor import process_data, validate_data, calculate_setu
 from core.data.group_manager import GroupManager
 from src.core.metrics.utils import limpar_setup_op_sem_acerto
 
-from .table_handler import configurar_colunas_da_tabela, carregar_dados_na_tabela
+from .table_handler import configurar_colunas_da_tabela, carregar_dados_na_tabela, aplicar_cores_grupos
 
 # Mapeamento de abreviações para nomes completos de máquinas
 MACHINE_ALIASES = {
@@ -41,8 +41,14 @@ MACHINE_ALIASES = {
     'samkoon': 'samkoon',
     'l': 'laminadora',
     'laminadora': 'laminadora',
-    'v': 'verniz.uv sakurai',
-    'verniz.uv sakurai': 'verniz.uv sakurai',
+    # Aliases para Sakurai
+    'verniz uv sakurai': 'sakurai',
+    'verniz.uv sakurai': 'sakurai',
+    'verniz sakurai': 'sakurai',
+    'uv sakurai': 'sakurai',
+    'sakurai': 'sakurai',
+    'v': 'sakurai',
+    # Outros
     'sbl': 'sbl',
     'sbl': 'sbl',
 }
@@ -90,8 +96,10 @@ def carregar_dados(data, maquina):
         df = process_dataframe(df)
         globals.df_global = df.copy()
         globals.linhas_agrupadas = {}
-        configurar_colunas_da_tabela(globals.tabela, globals.df_global)
-        carregar_dados_na_tabela(globals.tabela, globals.df_global)
+        if hasattr(globals, 'table_component') and globals.table_component:
+            globals.table_component.load_data(globals.df_global)
+        # Aplica cores de agrupamento automaticamente
+        aplicar_cores_grupos(globals.tabela, {})
         if globals.text_resultado:
             globals.text_resultado.delete("1.0", tk.END)
             globals.text_resultado.insert(tk.END, 
@@ -127,32 +135,16 @@ def process_dataframe(df):
 
     df = calculate_setup_times(df)
 
-    # Preenche campos especiais para todas as máquinas
-    if valor_maquina == 'furnax':
-        from src.core.metrics.maquinas.furnax import preencher_campos_furnax
-        df = preencher_campos_furnax(df)
-    elif valor_maquina == 'sbl':
-        from src.core.metrics.maquinas.sbl import preencher_campos_sbl
-        df = preencher_campos_sbl(df)
-    elif valor_maquina == 'komori':
-        from src.core.metrics.maquinas.komori import preencher_campos_komori
-        df = preencher_campos_komori(df)
-    elif valor_maquina == 'bobst':
-        from src.core.metrics.maquinas.bobst import preencher_campos_bobst
-        df = preencher_campos_bobst(df)
-    elif valor_maquina == 'hcd':
-        from src.core.metrics.maquinas.hcd import preencher_campos_hcd
-        df = preencher_campos_hcd(df)
-    elif valor_maquina == 'cv manual':
-        from src.core.metrics.maquinas.cv_manual import preencher_campos_cv_manual
-        df = preencher_campos_cv_manual(df)
-    elif valor_maquina == 'cv_guangya':
-        from src.core.metrics.maquinas.cv_guangya import preencher_campos_cv_guangya
-        df = preencher_campos_cv_guangya(df)
-    elif valor_maquina == 'samkoon':
-        from src.core.metrics.maquinas.samkoon import preencher_campos_samkoon
-        df = preencher_campos_samkoon(df)
-    # Adicione outras máquinas conforme necessário
+    # Preenche campos especiais para todas as máquinas (generalizado)
+    try:
+        modulo = f"src.core.metrics.maquinas.{valor_maquina}"
+        func_name = f"preencher_campos_{valor_maquina.replace(' ', '_')}"
+        import importlib
+        mod = importlib.import_module(modulo)
+        if hasattr(mod, func_name):
+            df = getattr(mod, func_name)(df)
+    except Exception:
+        pass
 
     # Limpa tempo de setup de OPs sem acerto (universal para todas as máquinas)
     df = limpar_setup_op_sem_acerto(df)

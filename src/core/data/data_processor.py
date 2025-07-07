@@ -6,7 +6,7 @@ from typing import Dict, List, Tuple, Set
 import pandas as pd
 import unicodedata
 import re
-from core.metrics.maquinas import komori, bobst
+from src.core.metrics.maquinas import komori, bobst
 
 def process_data(df: pd.DataFrame) -> pd.DataFrame:
     """

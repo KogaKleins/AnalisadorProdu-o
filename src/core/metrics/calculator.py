@@ -16,7 +16,11 @@ MACHINES_MAP = {
     'cv manual': 'cv_manual',
     'samkoon': 'samkoon',
     'laminadora': 'laminadora',
-    'verniz.uv sakurai': 'verniz_uv_sakurai',
+    'sakurai': 'sakurai',
+    'verniz uv sakurai': 'sakurai',
+    'verniz.uv sakurai': 'sakurai',
+    'verniz sakurai': 'sakurai',
+    'uv sakurai': 'sakurai',
     'bobst': 'bobst',
     'cv_guangya': 'cv_guangya',
 }

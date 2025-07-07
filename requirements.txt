@@ -1,16 +1,12 @@
-cffi==1.17.1
-charset-normalizer==3.4.2
-cryptography==45.0.4
-numpy==2.3.0
 pandas==2.3.0
-pdfminer.six==20250506
+numpy==2.3.0
 pdfplumber==0.11.7
-pillow==11.2.1
-pycparser==2.22
-pypdfium2==4.30.1
+fpdf
+unidecode
 python-dateutil==2.9.0.post0
 pytz==2025.2
-six==1.17.0
-tk==0.1.0
 tzdata==2025.2
-fpdf
+charset-normalizer==3.4.2
+# Dependências do Windows/Linux (Tkinter já vem com Python padrão)
+# tkinter
+# Dependências de logging, pathlib, subprocess, etc. já são da biblioteca padrão

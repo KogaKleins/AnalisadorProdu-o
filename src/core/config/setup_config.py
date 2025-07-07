@@ -11,6 +11,7 @@ TEMPOS_SETUP = {
     'fundo_automatico_outros': 30,   # Other automatic bottoms
     'colagem_lateral_primeiro': 130,  # First lateral bonding
     'colagem_lateral_outros': 15,    # Other lateral bondings
+    'laminadora': 45,                # Setup time for Laminadora
     'default': 180         # Default time
 }
 

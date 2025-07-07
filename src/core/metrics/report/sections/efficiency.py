@@ -190,7 +190,11 @@ def consolidar_dados_op(grupos_op, df):
                             match_suf = re.search(r'(f|v|t/r|tr|fr|fv|vr|cmyk|preto|colorido|\(.*\))$', sufixo)
                             sufixo_final = match_suf.group(1) if match_suf else sufixo
                             chave_entrada = f"{titulo.strip()}|{sufixo_final.strip()}"
-                        if chave_entrada == chave and 'acerto' in evento:
+                        # --- AJUSTE SAKURAI: soma 'acerto' e 'gravando tela' ---
+                        is_sakurai = 'sakurai' in proc_norm_sem_acento
+                        if chave_entrada == chave and (
+                            'acerto' in evento or (is_sakurai and 'gravando tela' in evento)
+                        ):
                             tempo_real_entrada += tempo_para_minutos(str(row.get('Tempo', '')))
                     except Exception:
                         pass

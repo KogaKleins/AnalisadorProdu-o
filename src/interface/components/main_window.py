@@ -4,9 +4,12 @@ Contains the main application window setup and layout.
 """
 
 import tkinter as tk
-from tkinter import ttk, font
+from tkinter import ttk, font, filedialog, messagebox
 import sys
 import platform
+import os
+import warnings
+from pathlib import Path
 sys.path.append('.')
 from src.interface import globals
 from fpdf import FPDF
@@ -88,9 +91,13 @@ class MainWindow:
     def initialize_components(self):
         """Initialize main components"""
         # Create table view
-        self.table_frame, self.table = create_table_view(self.painel)
+        from src.interface.components.table import TableComponent
+        self.table_component = TableComponent(self.painel)
+        self.table_frame = self.table_component.frame
+        self.table = self.table_component.table
         self.painel.add(self.table_frame, height=600, minsize=200)
-        globals.tabela = self.table  # <-- garantir referência global
+        globals.tabela = self.table
+        globals.table_component = self.table_component
 
         # Terminal VS Code style
         self.terminal_frame, self.terminal = create_terminal_panel(self.painel)
@@ -145,86 +152,254 @@ class MainWindow:
     
     def exportar_analise(self):
         """Exporta o conteúdo do widget text_resultado para um arquivo .txt ou PDF"""
-        from tkinter import filedialog, messagebox
-        conteudo = globals.text_resultado.get("1.0", "end-1c")
+        # Verifica se há conteúdo para exportar
+        if not hasattr(globals, 'text_resultado') or globals.text_resultado is None:
+            messagebox.showwarning("Aviso", "Terminal de análise não encontrado.")
+            return
+        
+        try:
+            conteudo = globals.text_resultado.get("1.0", "end-1c")
+        except Exception as e:
+            messagebox.showerror("Erro", f"Erro ao obter conteúdo do terminal: {e}")
+            return
+        
         if not conteudo.strip():
             messagebox.showwarning("Aviso", "Não há análise para exportar.")
             return
-        # Dialogo com tipos
+        
+        # Abre diálogo para salvar com opções de formato
         arquivo = filedialog.asksaveasfilename(
-            defaultextension=".txt",
-            filetypes=[("Arquivo de Texto", "*.txt"), ("PDF", "*.pdf"), ("Todos Arquivos", "*.*")]
+            defaultextension='.txt',
+            filetypes=[
+                ("Arquivo de Texto", "*.txt"), 
+                ("PDF", "*.pdf"), 
+                ("Todos Arquivos", "*.*")
+            ],
+            initialfile='analise.txt'
         )
+        
         if not arquivo:
             return
-        # Força extensão conforme filtro
-        if arquivo.lower().endswith('.pdf') or arquivo.lower().endswith('.txt'):
-            ext = arquivo.lower().split('.')[-1]
+        
+        # Determina o formato baseado na extensão escolhida
+        if arquivo.lower().endswith('.pdf'):
+            formato = 'pdf'
         else:
-            # Se não digitou extensão, tenta inferir pelo filtro
-            if arquivo.endswith('.'):
-                arquivo = arquivo[:-1]
-            # Pergunta ao usuário
-            tipo = messagebox.askquestion("Formato", "Exportar como PDF? (Sim para PDF, Não para TXT)")
-            if tipo == 'yes':
-                arquivo += '.pdf'
-                ext = 'pdf'
-            else:
-                arquivo += '.txt'
-                ext = 'txt'
+            formato = 'txt'
+            # Garante extensão .txt se não for PDF
+            if not arquivo.lower().endswith('.txt'):
+                arquivo = arquivo.rsplit('.', 1)[0] + '.txt'
+        
         try:
-            if ext == 'pdf':
-                try:
-                    from fpdf import FPDF
-                except ImportError:
-                    messagebox.showerror("Erro", "Biblioteca fpdf2 não instalada no ambiente Python!")
-                    return
-                pdf = FPDF()
-                pdf.add_page()
-                # Usa fonte Unicode
-                try:
-                    pdf.add_font('DejaVu', '', './DejaVuSans.ttf', uni=True)
-                    pdf.set_font('DejaVu', '', 10)
-                except Exception as e:
-                    messagebox.showerror("Erro", f"Erro ao carregar fonte Unicode: {e}")
-                    return
-                for linha in conteudo.splitlines():
-                    pdf.multi_cell(0, 8, linha)
-                pdf.output(arquivo)
+            if formato == 'pdf':
+                self._exportar_como_pdf(arquivo, conteudo)
             else:
-                with open(arquivo, "w", encoding="utf-8") as f:
-                    f.write(conteudo)
+                self._exportar_como_txt(arquivo, conteudo)
+            
             messagebox.showinfo("Sucesso", f"Análise exportada para {arquivo}")
+            
         except Exception as e:
             messagebox.showerror("Erro", f"Erro ao exportar análise: {str(e)}")
+            print(f"Erro detalhado na exportação: {e}")
+    
+    def _exportar_como_pdf(self, arquivo, conteudo):
+        """Exporta conteúdo como PDF - versão otimizada para executável"""
+        try:
+            # Suprime warnings da fpdf
+            warnings.filterwarnings("ignore", category=UserWarning, module="fpdf")
+            
+            # Cria o PDF
+            pdf = FPDF()
+            pdf.add_page()
+            
+            # Tenta usar fonte DejaVu se disponível, senão usa Arial
+            try:
+                # Determina caminho da fonte
+                if getattr(sys, 'frozen', False):
+                    # Executável PyInstaller
+                    base_path = Path(sys._MEIPASS)
+                else:
+                    # Script Python
+                    base_path = Path(__file__).parent.parent.parent.parent
+                
+                font_path = base_path / 'DejaVuSans.ttf'
+                
+                if font_path.exists():
+                    pdf.add_font('DejaVu', '', str(font_path))
+                    pdf.set_font('DejaVu', '', 10)
+                    use_dejavu = True
+                else:
+                    pdf.set_font('Arial', '', 10)
+                    use_dejavu = False
+            except Exception as font_error:
+                print(f"Aviso: Erro ao carregar fonte DejaVu: {font_error}")
+                pdf.set_font('Arial', '', 10)
+                use_dejavu = False
+            
+            # Limpa o conteúdo removendo caracteres especiais
+            conteudo_limpo = self._limpar_caracteres_especiais(conteudo)
+            
+            # Processa o conteúdo linha por linha
+            linhas = conteudo_limpo.split('\n')
+            
+            # Adiciona título
+            if use_dejavu:
+                pdf.set_font('DejaVu', 'B', 14)
+            else:
+                pdf.set_font('Arial', 'B', 14)
+            pdf.cell(0, 10, 'Análise de Produção', ln=True, align='C')
+            pdf.ln(5)
+            
+            # Volta para fonte normal
+            if use_dejavu:
+                pdf.set_font('DejaVu', '', 10)
+            else:
+                pdf.set_font('Arial', '', 10)
+            
+            # Processa cada linha
+            for linha in linhas:
+                try:
+                    # Verifica se ainda há espaço na página
+                    if pdf.get_y() > 270:  # Próximo da margem inferior
+                        pdf.add_page()
+                    
+                    # Processa a linha
+                    linha_str = str(linha).strip()
+                    
+                    # Se a linha estiver vazia, adiciona uma quebra de linha
+                    if not linha_str:
+                        pdf.ln(4)
+                        continue
+                    
+                    # Quebra linhas muito longas
+                    if len(linha_str) > 80:
+                        # Usa multi_cell para quebrar automaticamente
+                        pdf.multi_cell(0, 6, linha_str)
+                    else:
+                        # Usa cell para linhas normais
+                        pdf.cell(0, 6, linha_str, ln=True)
+                        
+                except Exception as e:
+                    print(f"Erro ao processar linha: {e}")
+                    # Continua com próxima linha
+                    continue
+            
+            # Salva o PDF
+            pdf.output(arquivo)
+            
+        except Exception as e:
+            raise Exception(f"Erro na geração do PDF: {str(e)}")
+    
+    def _exportar_como_txt(self, arquivo, conteudo):
+        """Exporta conteúdo como TXT"""
+        try:
+            with open(arquivo, "w", encoding="utf-8") as f:
+                f.write(conteudo)
+        except Exception as e:
+            raise Exception(f"Erro ao salvar arquivo TXT: {str(e)}")
+    
+    def _limpar_caracteres_especiais(self, texto):
+        """Remove ou substitui caracteres especiais que podem causar problemas no PDF"""
+        # Dicionário de substituições para emojis comuns
+        substituicoes = {
+            '🎯': '-> ',
+            '🖱️': '-> ',
+            '📊': '[GRAFICO] ',
+            '⚡': '[RAPIDO] ',
+            '🔧': '[CONFIG] ',
+            '📈': '[CRESCIMENTO] ',
+            '⏰': '[TEMPO] ',
+            '🏭': '[FABRICA] ',
+            '🔗': '[LINK] ',
+            '🔓': '[DESBLOQUEADO] ',
+            '📝': '[EDICAO] ',
+            '➕': '+ ',
+            '🗑️': '- ',
+            '📤': '[EXPORTAR] ',
+            '📑': '[RELATORIO] ',
+            '✅': '[OK] ',
+            '❌': '[ERRO] ',
+            '⭐': '* ',
+            '🚀': '[LANCAMENTO] ',
+            '💡': '[IDEIA] ',
+            '🎨': '[DESIGN] ',
+            '🔍': '[BUSCA] ',
+            '📋': '[LISTA] ',
+            '⚙️': '[CONFIGURACAO] ',
+            '🎪': '[EVENTO] ',
+            '📦': '[PACOTE] ',
+            '🔄': '[ATUALIZAR] ',
+            '📅': '[DATA] ',
+            '🕐': '[HORA] ',
+            '📌': '[FIXAR] ',
+            '🎵': '[MUSICA] ',
+            '🎶': '[SOM] ',
+            '🎼': '[PARTITURA] ',
+            '🎹': '[PIANO] ',
+            '🎺': '[TROMPETE] ',
+            '🎻': '[VIOLINO] ',
+            '🎸': '[GUITARRA] ',
+            '🥁': '[BATERIA] ',
+            '🎷': '[SAXOFONE] '
+        }
+        
+        # Aplica as substituições
+        for emoji, substituto in substituicoes.items():
+            texto = texto.replace(emoji, substituto)
+        
+        # Remove outros caracteres que podem causar problemas
+        # Mantém apenas caracteres ASCII imprimíveis e alguns especiais
+        texto_limpo = ""
+        for char in texto:
+            if ord(char) < 32:  # Caracteres de controle
+                if char in ['\n', '\r', '\t']:  # Mantém quebras de linha e tabs
+                    texto_limpo += char
+                else:
+                    texto_limpo += ' '  # Substitui outros por espaço
+            elif ord(char) <= 126:  # Caracteres ASCII imprimíveis
+                texto_limpo += char
+            elif ord(char) >= 160 and ord(char) <= 255:  # Caracteres latinos estendidos
+                texto_limpo += char
+            else:  # Outros caracteres especiais
+                texto_limpo += ' '
+        
+        return texto_limpo
     
     def aplicar_media_geral(self):
         """Atualiza apenas as linhas de produção na coluna 'Média Produção' com o valor digitado na média geral."""
         valor = self.entrada_media_geral.get().strip()
         if not valor:
             return
+        
         # Garante o sufixo 'p/h'
         if 'p/h' not in valor:
             valor = valor + ' p/h'
+        
         # Atualiza DataFrame global
         import pandas as pd
         if hasattr(globals, 'df_global') and isinstance(globals.df_global, pd.DataFrame):
             if 'Média Produção' in globals.df_global.columns and 'Evento' in globals.df_global.columns:
-                mask = globals.df_global['Evento'].str.lower().str.contains('produção')
+                mask = globals.df_global['Evento'].str.lower().str.contains('produção', na=False)
                 globals.df_global.loc[mask, 'Média Produção'] = valor
+        
         # Atualiza visual da tabela
         tabela = globals.tabela
         if tabela is not None:
-            colunas = tabela['columns']
-            if 'Média Produção' in colunas and 'Evento' in colunas:
-                idx_media = colunas.index('Média Produção')
-                idx_evento = colunas.index('Evento')
-                for item in tabela.get_children():
-                    valores = list(tabela.item(item)['values'])
-                    evento = str(valores[idx_evento]).lower()
-                    if 'produção' in evento:
-                        valores[idx_media] = valor
-                        tabela.item(item, values=valores)
+            try:
+                colunas = list(tabela['columns'])
+                if 'Média Produção' in colunas and 'Evento' in colunas:
+                    idx_media = colunas.index('Média Produção')
+                    idx_evento = colunas.index('Evento')
+                    
+                    for item in tabela.get_children():
+                        valores = list(tabela.item(item)['values'])
+                        if len(valores) > max(idx_media, idx_evento):
+                            evento = str(valores[idx_evento]).lower()
+                            if 'produção' in evento:
+                                valores[idx_media] = valor
+                                tabela.item(item, values=valores)
+            except Exception as e:
+                print(f"Erro ao aplicar média geral: {e}")
     
     def run(self):
         """Start the application"""

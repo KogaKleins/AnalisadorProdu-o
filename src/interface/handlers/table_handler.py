@@ -102,21 +102,56 @@ def configurar_colunas_da_tabela(tabela, df=None):
 def aplicar_cores_grupos(tabela, grupos):
     """
     Aplica cores diferentes para cada grupo na tabela.
-    
-    Args:
-        tabela (ttk.Treeview): A tabela para aplicar as cores
-        grupos (dict): Dicionário com os grupos e seus índices
+    Se a máquina for 'sakurai', agrupa 'acerto' e 'gravando tela' juntos por OP.
     """
     cores = ['#FFD700', '#98FB98', '#87CEEB', '#DDA0DD', '#F0E68C',
              '#E6E6FA', '#FFA07A', '#20B2AA', '#FF69B4', '#BDB76B']
-    
-    # Aplica novas cores
+    # Detecta se é Sakurai
+    maquina = getattr(globals, 'entrada_maquina', None)
+    if maquina and hasattr(maquina, 'get'):
+        nome_maquina = maquina.get().strip().lower()
+    else:
+        nome_maquina = str(maquina).strip().lower() if maquina else ''
+    if 'sakurai' in nome_maquina:
+        # Agrupamento especial: por OP, todos 'acerto' e 'gravando tela' juntos
+        op_col = None
+        evento_col = None
+        colunas = list(map(str, tabela['columns']))
+        for i, c in enumerate(colunas):
+            c_norm = c.strip().lower()
+            if c_norm in ['os', 'op']:
+                op_col = i
+            if 'evento' in c_norm:
+                evento_col = i
+        if op_col is not None and evento_col is not None:
+            op_to_indices = {}
+            op_to_color_idx = {}
+            cor_idx = 0
+            for idx, item_id in enumerate(tabela.get_children()):
+                valores = list(tabela.item(item_id)['values'])
+                if op_col >= len(valores) or evento_col >= len(valores):
+                    continue
+                op = str(valores[op_col]).strip()
+                evento = str(valores[evento_col]).lower()
+                if 'acerto' in evento or 'gravando tela' in evento:
+                    if op not in op_to_indices:
+                        op_to_indices[op] = []
+                        op_to_color_idx[op] = cor_idx
+                        cor_idx += 1
+                    op_to_indices[op].append(idx)
+            for op, indices in op_to_indices.items():
+                cor = cores[op_to_color_idx[op] % len(cores)]
+                tag = f'grupo_sakurai_{op_to_color_idx[op]}'
+                tabela.tag_configure(tag, background=cor)
+                for idx in indices:
+                    item_id = tabela.get_children()[idx]
+                    tabela.item(item_id, tags=(tag,))
+        return
+    # Padrão para outras máquinas
     for i, (grupo, indices) in enumerate(grupos.items()):
         cor = cores[i % len(cores)]  # Cicla pelas cores se houver mais grupos que cores
         tag = f'grupo_{i}'
         tabela.tag_configure(tag, background=cor)
-        
-        # Aplica a cor às linhas do grupo
         for idx in indices:
             item_id = tabela.get_children()[idx]
             tabela.item(item_id, tags=(tag,))
@@ -228,50 +263,25 @@ def editar_celula(event, treeview):
             col_norm = unidecode.unidecode(col_nome).lower()
             # Se for coluna de tempo, normaliza e atualiza campo auxiliar em minutos
             if 'tempo' in col_norm:
-                # Normaliza entradas de tempo para HH:MM
                 temp = novo_valor.strip()
                 temp_num = re.sub(r'\D', '', temp)
-                
                 if len(temp_num) == 3:
-                    # 3 dígitos: interpretar como HMM (ex: 200 = 2:00, 180 = 1:80 -> 2:20)
                     h = int(temp_num[0])
                     m = int(temp_num[1:])
-                    # Ajusta se minutos > 59
-                    h += m // 60
-                    m = m % 60
-                    temp = f"0{h}:{m:02d}"
                 elif len(temp_num) == 4:
-                    # 4 dígitos: interpretar como HHMM (ex: 0200 = 02:00, 1430 = 14:30)
                     h = int(temp_num[:2])
                     m = int(temp_num[2:])
-                    # Ajusta se minutos > 59
-                    h += m // 60
-                    m = m % 60
-                    temp = f"{h:02d}:{m:02d}"
-                elif len(temp_num) <= 2 and temp_num:
-                    # 1 ou 2 dígitos: interpretar como minutos (ex: 40 = 00:40, 80 = 01:20)
-                    minutos = int(temp_num)
-                    h = minutos // 60
-                    m = minutos % 60
-                    temp = f"{h:02d}:{m:02d}"
-                elif ':' in temp:
-                    # Já está no formato HH:MM, apenas valida
-                    partes = temp.split(':')
-                    if len(partes) == 2:
-                        try:
-                            h = int(partes[0])
-                            m = int(partes[1])
-                            # Ajusta se minutos > 59
-                            h += m // 60
-                            m = m % 60
-                            temp = f"{h:02d}:{m:02d}"
-                        except:
-                            pass
-                
-                novo_valor = temp
+                else:
+                    h = 0
+                    m = 0
+                # Ajusta se minutos > 59
+                h += m // 60
+                m = m % 60
+                temp_formatado = f"{h:02d}:{m:02d}"
+                novo_valor = temp_formatado
                 # Atualiza campo auxiliar 'Tempo (min)' se existir
                 try:
-                    tempo_min = formatar_tempo_para_minutos(novo_valor)
+                    minutos = h * 60 + m
                     idx_tempo_min = None
                     for idx, c in enumerate(colunas):
                         if 'tempo (min' in unidecode.unidecode(c).lower():
@@ -279,7 +289,7 @@ def editar_celula(event, treeview):
                             break
                     valores = list(treeview.item(item)['values'])
                     if idx_tempo_min is not None and idx_tempo_min < len(valores):
-                        valores[idx_tempo_min] = tempo_min
+                        valores[idx_tempo_min] = minutos
                         treeview.item(item, values=valores)
                 except Exception:
                     pass
@@ -303,8 +313,16 @@ def editar_celula(event, treeview):
                     # Tempo: salva como minutos no DataFrame, exibe HH:MM na tabela
                     elif 'tempo' in col_norm:
                         try:
-                            minutos = parse_tempo(novo_valor)
-                            valores[column_index] = formatar_tempo(minutos)
+                            # Salva minutos no DataFrame
+                            temp = novo_valor.strip()
+                            partes = temp.split(':')
+                            if len(partes) == 2:
+                                h = int(partes[0])
+                                m = int(partes[1])
+                                minutos = h * 60 + m
+                            else:
+                                minutos = 0
+                            valores[column_index] = f"{h:02d}:{m:02d}"
                             if globals.df_global is not None:
                                 globals.df_global.at[treeview.index(item), colunas[column_index]] = minutos
                         except Exception:
@@ -315,6 +333,12 @@ def editar_celula(event, treeview):
                             globals.df_global.at[treeview.index(item), colunas[column_index]] = novo_valor
                     treeview.item(item, values=valores)
                 atualizar_dataframe_global()
+                # Atualiza o relatório após edição
+                try:
+                    if hasattr(globals, 'main_window_instance') and globals.main_window_instance:
+                        globals.main_window_instance.calcular_desempenho_wrapper()
+                except Exception:
+                    pass
             entry.destroy()
         def cancelar_edicao(event=None):
             entry.destroy()
@@ -342,15 +366,17 @@ def inserir_linha(tabela):
     nova_linha = ['' for _ in colunas]
     tabela.insert('', idx, values=nova_linha)
     df = globals.df_global.copy() if globals.df_global is not None else pd.DataFrame(columns=colunas)
-    nova_df = pd.DataFrame([['' for _ in colunas]], columns=colunas)
-    df1 = df.iloc[:idx] if idx > 0 else pd.DataFrame(columns=colunas)
-    df2 = df.iloc[idx:] if idx < len(df) else pd.DataFrame(columns=colunas)
+    nova_df = pd.DataFrame([['' for _ in colunas]], columns=pd.Index(colunas))
+    df1 = df.iloc[:idx] if idx > 0 else pd.DataFrame(columns=pd.Index(colunas))
+    df2 = df.iloc[idx:] if idx < len(df) else pd.DataFrame(columns=pd.Index(colunas))
     globals.df_global = pd.concat([df1, nova_df, df2], ignore_index=True)
     for item in tabela.get_children():
         tabela.delete(item)
     if isinstance(globals.df_global, pd.DataFrame):
         for i, row in globals.df_global.iterrows():
             tabela.insert('', 'end', values=list(row))
+    # Atualiza o DataFrame global e a linha TOTAL
+    atualizar_dataframe_global()
 
 def deletar_linha(tabela):
     selecionadas = tabela.selection()
@@ -359,14 +385,15 @@ def deletar_linha(tabela):
     indices = [tabela.index(item) for item in selecionadas]
     if globals.df_global is not None and isinstance(globals.df_global, pd.DataFrame):
         globals.df_global = globals.df_global.drop(indices).reset_index(drop=True)
-    for item in selecionadas:
+    # Limpa todos os itens da tabela
+    for item in tabela.get_children():
         tabela.delete(item)
-    # Corrigir: garantir que get_children retorna lista
-    all_items = list(tabela.get_children())
-    tabela.delete(*all_items)
+    # Reinsere as linhas com numeração sequencial
     if globals.df_global is not None and isinstance(globals.df_global, pd.DataFrame):
         for i, row in globals.df_global.iterrows():
-            tabela.insert('', 'end', values=list(row))
+            tabela.insert('', 'end', text=str(i + 1), values=list(row))
+    # Atualiza o DataFrame global e a linha TOTAL
+    atualizar_dataframe_global()
 
 def atualizar_dataframe_global():
     """
@@ -409,6 +436,8 @@ def atualizar_dataframe_global():
         for row in dados:
             tempo_str = row[idx_tempo] if idx_tempo < len(row) else ''
             row[idx_tempo_min] = parse_tempo(tempo_str)
+    # Remove todas as linhas TOTAL existentes antes de processar
+    dados = [row for row in dados if str(row[0]).strip().upper() != 'TOTAL']
     # Adiciona linha de totais ao final (somente para linhas de produção/OPs válidas)
     if dados and colunas:
         totais = ['' for _ in colunas]
@@ -426,31 +455,28 @@ def atualizar_dataframe_global():
                 evento = str(row[idx_evento]).lower()
                 if 'producao' in unidecode.unidecode(evento):
                     linhas_validas.append(row)
-        for i in idxs_qtd:
-            try:
-                total_num = sum(row[i] for row in linhas_validas if isinstance(row[i], (int, float)))
-                totais[i] = formatar_quantidade(total_num)
-            except Exception:
-                totais[i] = ''
-        if len(totais) > 0:
-            totais[0] = 'TOTAL'
-        if dados and str(dados[-1][0]).strip().upper() == 'TOTAL':
-            dados = dados[:-1]
-        dados.append(totais)
+        # Só adiciona linha TOTAL se houver dados válidos para somar
+        if linhas_validas:
+            for i in idxs_qtd:
+                try:
+                    total_num = sum(row[i] for row in linhas_validas if isinstance(row[i], (int, float)))
+                    totais[i] = formatar_quantidade(total_num)
+                except Exception:
+                    totais[i] = ''
+            if len(totais) > 0:
+                totais[0] = 'TOTAL'
+            dados.append(totais)
     # Padroniza colunas para lista de strings simples
-    if hasattr(colunas, 'get'):
-        colunas = list(colunas.get())
-    else:
-        colunas = list(colunas)
+    colunas = list(colunas)
     colunas = [str(c) for c in colunas]
     if dados and isinstance(colunas, list) and all(isinstance(c, str) for c in colunas):
         import pandas as pd
         try:
-            df = pd.DataFrame(data=dados, columns=colunas)
+            df = pd.DataFrame(data=dados, columns=pd.Index(colunas))
             if not df.empty:
                 globals.df_global = df
         except Exception:
-            df = pd.DataFrame(data=dados)
+            df = pd.DataFrame(data=dados, columns=pd.Index(colunas))
             if not df.empty:
                 globals.df_global = df
 
